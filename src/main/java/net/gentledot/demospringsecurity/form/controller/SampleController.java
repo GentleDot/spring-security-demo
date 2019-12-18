@@ -1,4 +1,4 @@
-package net.gentledot.demospringsecurity.form;
+package net.gentledot.demospringsecurity.form.controller;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -34,7 +34,7 @@ public class SampleController {
 
     @GetMapping("/admin")
     public String admin(Model model, Principal principal){
-        model.addAttribute("message", "Hello, " + principal.getName());
+        model.addAttribute("message", "Hello, " + principal.getName() + "You Have Admin Role.");
         return "sample/admin";
     }
 
