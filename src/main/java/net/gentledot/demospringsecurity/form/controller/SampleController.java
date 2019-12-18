@@ -34,7 +34,7 @@ public class SampleController {
 
     @GetMapping("/admin")
     public String admin(Model model, Principal principal){
-        model.addAttribute("message", "Hello, " + principal.getName() + "You Have Admin Role.");
+        model.addAttribute("message", "Hello, " + principal.getName() + "! You are logged in as Admin.");
         return "sample/admin";
     }
 

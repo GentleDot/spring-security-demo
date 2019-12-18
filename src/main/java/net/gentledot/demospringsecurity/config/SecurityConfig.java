@@ -1,5 +1,7 @@
-package net.gentledot.demospringsecurity.form.config;
+package net.gentledot.demospringsecurity.config;
 
+import net.gentledot.demospringsecurity.account.service.AccountService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -18,7 +20,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         http.anonymous()
                 .and()
                 .authorizeRequests()
-                .mvcMatchers("/", "/info").permitAll()
+                .mvcMatchers("/", "/info", "/account/**").permitAll()
                 .mvcMatchers("/admin").hasRole("ADMIN")
                 .anyRequest().authenticated();
                 /*
@@ -34,20 +36,28 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         http.httpBasic();
     }
 
+//    @Override
+//    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+//        // 크게 inMemory, jdbc, ldap Authentication 사용 가능
+//        // {noop} : 암호화 방식 없음 (encoder 없음)
+//        auth.inMemoryAuthentication()
+//                .withUser("gentledot")
+//                    .password("{noop}123").roles("USER")
+//                .and()
+//                .withUser("admin").password("{noop}!@#").roles("ADMIN");
+//    }
+//
+//    @Bean
+//    @Override
+//    public AuthenticationManager authenticationManagerBean() throws Exception {
+//        return super.authenticationManagerBean();
+//    }
+
+    @Autowired
+    AccountService accountService;
+
     @Override
     protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-        // 크게 inMemory, jdbc, ldap Authentication 사용 가능
-        // {noop} : 암호화 방식 없음 (encoder 없음)
-        auth.inMemoryAuthentication()
-                .withUser("gentledot")
-                    .password("{noop}123").roles("USER")
-                .and()
-                .withUser("admin").password("{noop}!@#").roles("ADMIN");
-    }
-
-    @Bean
-    @Override
-    public AuthenticationManager authenticationManagerBean() throws Exception {
-        return super.authenticationManagerBean();
+        auth.userDetailsService(accountService);
     }
 }
