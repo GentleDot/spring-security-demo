@@ -20,9 +20,12 @@
 
 ## 참고자료
 - 문서 :
+    - [Gradle User Guide #Managing your dependencies](https://docs.gradle.org/current/userguide/building_java_projects.html#sec:java_dependency_management_overview)
     - [Gradle 빌드시스템 기초](https://effectivesquid.tistory.com/entry/Gradle-%EB%B9%8C%EB%93%9C%EC%8B%9C%EC%8A%A4%ED%85%9C-%EA%B8%B0%EC%B4%88)
     - [spring-security 5.0 에서 달라진 암호변환정책](https://java.ihoney.pe.kr/498)
     - [Spring Password Encoder](https://gompangs.tistory.com/entry/Spring-Password-Encoder)
+    - [자바 커스텀 어노테이션 만들기](https://advenoh.tistory.com/21)
+    
 - 강의 :
     - [스프링 시큐리티 / 백기선](https://www.inflearn.com/course/%EB%B0%B1%EA%B8%B0%EC%84%A0-%EC%8A%A4%ED%94%84%EB%A7%81-%EC%8B%9C%ED%81%90%EB%A6%AC%ED%8B%B0/lecture/22894)  
 
@@ -41,12 +44,12 @@
         - 이 페이지는 인증을 하지 않고도 접근할 수 있으며, 인증을 한 사용자도 접근할 수 있습니다.
     
     1. 대시보드
-        - ? '/dashboard'
+        - GET '/dashboard'
         - 이 페이지는 반드시 로그인 한 사용자만 접근할 수 있습니다.
         - 인증하지 않은 사용자가 접근할 시 로그인 페이지로 이동합니다.
     
     1. 어드민
-        - ? '/admin'
+        - GET '/admin'
         - 이 페이지는 반드시 ADMIN 권한을 가진 사용자만 접근할 수 있습니다.
         - 인증하지 않은 사용자가 접근할 시 로그인 페이지로 이동합니다.
         - 인증은 거쳤으나, 권한이 충분하지 않은 경우 에러 메시지를 출력합니다.
@@ -401,3 +404,145 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         /* http://localhost:8080/account/USER/test1/test123 */
         {"id":2,"username":"test1","password":"{bcrypt}$2a$10$n5KBvFFQl.5eKAlM2cewOuItLuWIYLFzBWBKRTZCFqE91uZNfQ22G","role":"USER"}
         ```
+      
+#### Spring Security Test
+- 의존성 추가  (테스트에서 사용할 기능을 제공)
+```
+// pom.xml
+<dependency>
+    <groupId>org.springframework.security</groupId>
+    <artifactId>spring-security-test</artifactId>
+    <scope>test</scope>
+</dependency>
+
+// build.gradle
+testImplementation 'org.springframework.security:spring-security-test'
+```
+
+```
+    @Test
+    public void requestAdminPageByUserWithForbidden() throws Exception {
+        // given
+        String username = "test";
+
+        // when
+        ResultActions actions = mockMvc.perform(get("/admin").with(user(username).roles("USER")));
+
+        // then
+        actions.andDo(print())
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = "ADMIN")
+    public void requestAdminPageByAdmin() throws Exception {
+        // given
+
+        // when
+        ResultActions actions = mockMvc.perform(get("/admin"));
+        // then
+        actions.andDo(print())
+                .andExpect(status().isOk());
+    }
+```
+
+- RequestPostProcessor를 사용해서 테스트
+    - with(user(“user”))
+    - with(anonymous())
+    - with(user(“user”).password(“123”).roles(“USER”, “ADMIN”))
+
+- Annotation 사용
+    - @WithMockUser
+    - @WithMockUser(roles=”ADMIN”)
+    - 커스텀 애노테이션을 만들어 재사용 가능.
+
+- Form Login / Logout
+    - perform(formLogin())
+    - perform(formLogin().user("admin").password("pass"))
+    - perform(logout())
+
+- form login의 응답 유형 확인
+    - authenticated()
+    - unauthenticated()
+
+```
+package net.gentledot.demospringsecurity.account.controller;
+
+import net.gentledot.demospringsecurity.account.domain.Account;
+import net.gentledot.demospringsecurity.account.service.AccountService;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.annotation.Transactional;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.authenticated;
+import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.unauthenticated;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+
+@RunWith(SpringRunner.class)
+@SpringBootTest
+@AutoConfigureMockMvc
+public class AccountControllerTest {
+
+    @Autowired
+    MockMvc mockMvc;
+
+    @Autowired
+    AccountService accountService;
+
+    @Test
+    @Transactional
+    public void loginSuccess() throws Exception {
+        // given
+        String username = "test";
+        String password = "123";
+
+        Account account = createUser(username, password);
+
+        // when
+        ResultActions actions = mockMvc.perform(formLogin().user(username).password(password));
+
+        // then
+        actions.andDo(print())
+                .andExpect(authenticated());
+    }
+
+    @Test
+    @Transactional
+    public void loginFailed() throws Exception {
+        // given
+        String username = "test";
+        String password = "123";
+
+        Account account = createUser(username, password);
+
+        // when
+        ResultActions actions = mockMvc.perform(formLogin().user(username).password("1234qwer"));
+
+        // then
+        actions.andDo(print())
+                .andExpect(unauthenticated());
+    }
+
+    private Account createUser(String username, String password) {
+        Account account = Account.builder()
+                .username(username)
+                .password(password)
+                .role("USER")
+                .build();
+        return accountService.createUser(account);
+    }
+}
+```
