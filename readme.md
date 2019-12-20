@@ -16,6 +16,9 @@
         - [AuthenticationManager와 Authentication](#AuthenticationManager와-Authentication)
         - [ThreadLocal](#ThreadLocal)
         - [Spring Security Filter와 FilterChainProxy](#Spring-Security-Filter와-FilterChainProxy)
+        - [AccessControl(Authorization)](#AccessControl(Authorization))
+        - [FilterSecurityInterceptor](#FilterSecurityInterceptor)
+        - [Architecture 정리](#Architecture-정리)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -897,4 +900,282 @@ public class AccountContext {
 		implements WebApplicationInitializer
 		    - public static final String DEFAULT_FILTER_NAME = "springSecurityFilterChain"
 		    
+
+#### AccessControl(Authorization)
+- AccessDecisionManager 
+    - Access Control 결정(인가)을 내리는 인터페이스로, 구현체 3가지를 기본으로 제공한다.
+        - AffirmativeBased​: 여러 Voter중에 한명이라도 허용하면 허용. 기본 전략.
+        - ConsensusBased: 다수결
+        - UnanimousBased: 만장일치
+        
+    - public class AffirmativeBased extends AbstractAccessDecisionManager
+
+- AccessDecisionVoter
+    - 해당 Authentication이 특정한 Object에 접근할 때 필요한 ConfigAttributes를 만족하는지 확인한다.
+    - WebExpressionVoter​: 웹 시큐리티에서 사용하는 기본 구현체, ROLE_Xxxx가 매치하는지 확인.
+    - RoleHierarchyVoter: 계층형 ROLE 지원. ADMIN > MANAGER > USER
+    - getDecisionVoters()
+
+        ```
+        public void decide(Authentication authentication, Object object,
+                    Collection<ConfigAttribute> configAttributes) throws AccessDeniedException {
+            int deny = 0;
+        
+            for (AccessDecisionVoter voter : getDecisionVoters()) {
+                int result = voter.vote(authentication, object, configAttributes);
+        
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Voter: " + voter + ", returned: " + result);
+                }
+        
+                switch (result) {
+                case AccessDecisionVoter.ACCESS_GRANTED:
+                    return;
+        
+                case AccessDecisionVoter.ACCESS_DENIED:
+                    deny++;
+        
+                    break;
+        
+                default:
+                    break;
+                }
+            }
+        }
+        ```
+
+- AccessDecisionVoter를 커스터마이징 하는 방법
+    - 계층형 ROLE 설정
     
+    ```
+    package net.gentledot.demospringsecurity.config;
+    
+    import net.gentledot.demospringsecurity.account.service.AccountService;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.context.annotation.Configuration;
+    import org.springframework.security.access.expression.SecurityExpressionHandler;
+    import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
+    import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+    import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+    import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+    import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+    import org.springframework.security.web.FilterInvocation;
+    import org.springframework.security.web.access.expression.DefaultWebSecurityExpressionHandler;
+    
+    @Configuration
+    @EnableWebSecurity
+    public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    
+        @Autowired
+        AccountService accountService;
+    
+        @Override
+        protected void configure(HttpSecurity http) throws Exception {
+            // 인가 설정
+            http.anonymous()
+                    .and()
+                    .authorizeRequests()
+                    .mvcMatchers("/", "/info", "/account/**").permitAll()
+                    .mvcMatchers("/admin").hasRole("ADMIN")
+                    .mvcMatchers("/user").hasRole("USER")
+                    .anyRequest().authenticated()
+    //                .accessDecisionManager(accessDecisionManager());
+                    .expressionHandler(expressionHandler());
+                    /*
+                    .and()
+                    .formLogin()
+                    .and()
+                    .httpBasic();
+                    */
+    
+            // form login 설정
+            http.formLogin();
+            // http의 basic oauth ??
+            http.httpBasic();
+        }
+    
+        /*
+        private AccessDecisionManager accessDecisionManager() {
+    
+            RoleHierarchyImpl roleHierarchy = new RoleHierarchyImpl();
+            roleHierarchy.setHierarchy("ROLE_ADMIN > ROLE_USER");
+    
+            DefaultWebSecurityExpressionHandler handler = new DefaultWebSecurityExpressionHandler();
+            handler.setRoleHierarchy(roleHierarchy);
+    
+            WebExpressionVoter webExpressionVoter = new WebExpressionVoter();
+            webExpressionVoter.setExpressionHandler(handler);
+    
+    //        List<AccessDecisionVoter<?>> voters = Arrays.asList(webExpressionVoter);
+            List<AccessDecisionVoter<?>> voters = Collections.singletonList(webExpressionVoter);
+            return new AffirmativeBased(voters);
+        }
+        */
+    
+    
+        //    private SecurityExpressionHandler expressionHandler() {
+        private SecurityExpressionHandler<FilterInvocation> expressionHandler() {
+            RoleHierarchyImpl roleHierarchy = new RoleHierarchyImpl();
+            roleHierarchy.setHierarchy("ROLE_ADMIN > ROLE_USER");
+    
+            DefaultWebSecurityExpressionHandler handler = new DefaultWebSecurityExpressionHandler();
+            handler.setRoleHierarchy(roleHierarchy);
+    
+            return handler;
+        }
+    }
+    ```
+    
+#### FilterSecurityInterceptor
+AccessDecisionManager를 사용하여 Access Control 또는 예외 처리 하는 필터.
+대부분의 경우 FilterChainProxy에 제일 마지막 필터로 들어있다.
+
+public class FilterSecurityInterceptor extends AbstractSecurityInterceptor implements
+		Filter
+		
+```
+// public abstract class AbstractSecurityInterceptor implements InitializingBean,
+   		ApplicationEventPublisherAware, MessageSourceAware
+
+// Attempt authorization
+try {
+    this.accessDecisionManager.decide(authenticated, object, attributes);
+}
+catch (AccessDeniedException accessDeniedException) {
+    publishEvent(new AuthorizationFailureEvent(object, attributes, authenticated,
+            accessDeniedException));
+
+    throw accessDeniedException;
+}
+```
+
+- ExceptionTranslationFilter
+    - 필터 체인에서 발생하는 AccessDeniedException과 AuthenticationException을 처리하는 필터
+    
+    - AuthenticationException 발생 시 (권한이 요구되는 페이지에 권한없이 접근할 때)
+        - AuthenticationEntryPoint 실행
+        - AbstractSecurityInterceptor 하위 클래스(예, FilterSecurityInterceptor)에서 발생하는 예외만 처리.
+            
+    - AccessDeniedException 발생 시 (권한이 요구되는 페이지에 요구되는 권한이 아닌걸 가지고 요청할 때)
+        - 익명 사용자라면 AuthenticationEntryPoint 실행
+        - 익명 사용자가 아니면 AccessDeniedHandler에게 위임
+
+    - 그렇다면 UsernamePasswordAuthenticationFilter에서 발생한 인증 에러는?
+        - public class UsernamePasswordAuthenticationFilter extends
+          		AbstractAuthenticationProcessingFilter
+            - AbstractAuthenticationProcessingFilter.unsuccessfulAuthentication(request, response, failed);
+                ```
+                Authentication authResult;
+                
+                try {
+                    authResult = attemptAuthentication(request, response);
+                    if (authResult == null) {
+                        // return immediately as subclass has indicated that it hasn't completed
+                        // authentication
+                        return;
+                    }
+                    sessionStrategy.onAuthentication(authResult, request, response);
+                }
+                catch (InternalAuthenticationServiceException failed) {
+                    logger.error(
+                            "An internal error occurred while trying to authenticate the user.",
+                            failed);
+                    unsuccessfulAuthentication(request, response, failed);
+        
+                    return;
+                }
+                catch (AuthenticationException failed) {
+                    // Authentication failed
+                    unsuccessfulAuthentication(request, response, failed);
+        
+                    return;
+                }
+                ```
+                
+                - SimpleUrlAuthenticationFailureHandler.saveException(request, exception)
+                ```
+                // public class SimpleUrlAuthenticationFailureHandler implements
+                		AuthenticationFailureHandler
+                public void onAuthenticationFailure(HttpServletRequest request,
+                			HttpServletResponse response, AuthenticationException exception)
+                			throws IOException, ServletException {
+                
+                    if (defaultFailureUrl == null) {
+                        logger.debug("No failure URL set, sending 401 Unauthorized error");
+            
+                        response.sendError(HttpStatus.UNAUTHORIZED.value(),
+                            HttpStatus.UNAUTHORIZED.getReasonPhrase());
+                    }
+                    else {
+                        saveException(request, exception);
+            
+                        if (forwardToDestination) {
+                            logger.debug("Forwarding to " + defaultFailureUrl);
+            
+                            request.getRequestDispatcher(defaultFailureUrl)
+                                    .forward(request, response);
+                        }
+                        else {
+                            logger.debug("Redirecting to " + defaultFailureUrl);
+                            redirectStrategy.sendRedirect(request, response, defaultFailureUrl);
+                        }
+                    }
+                }
+              
+                protected final void saveException(HttpServletRequest request,
+                			AuthenticationException exception) {
+                    if (forwardToDestination) {
+                        request.setAttribute(WebAttributes.AUTHENTICATION_EXCEPTION, exception);
+                    }
+                    else {
+                        HttpSession session = request.getSession(false);
+            
+                        if (session != null || allowSessionCreation) {
+                            request.getSession().setAttribute(WebAttributes.AUTHENTICATION_EXCEPTION,
+                                    exception);
+                        }
+                    }
+                }
+                ```
+
+#### Architecture 정리
+- Security Filter
+    - public final class WebSecurity extends
+    		AbstractConfiguredSecurityBuilder<Filter, WebSecurity> implements
+    		SecurityBuilder<Filter>, ApplicationContextAware
+    ```
+    /**
+     * <p>
+     * The {@link WebSecurity} is created by {@link WebSecurityConfiguration} to create the
+     * {@link FilterChainProxy} known as the Spring Security Filter Chain
+     * (springSecurityFilterChain). The springSecurityFilterChain is the {@link Filter} that
+     * the {@link DelegatingFilterProxy} delegates to.
+     * </p>
+     *
+     * <p>
+     * Customizations to the {@link WebSecurity} can be made by creating a
+     * {@link WebSecurityConfigurer} or more likely by overriding
+     * {@link WebSecurityConfigurerAdapter}.
+     * </p>
+     *
+     * @see EnableWebSecurity
+     * @see WebSecurityConfiguration
+     *
+     * @author Rob Winch
+     * @since 3.2
+     */    
+    ```
+  
+- 인증 (AuthenticationManager)
+    - SecurityContextPersistenceFilter
+        - AuthenticationManager
+            - ProviderManager
+                - DaoAuthenticationProvider
+                    - UserDetailService
+
+- 인가(AccessDecisionManager)
+    - FilterSecurityInterceptor
+        - AccessDecisionManager
+            - AffirmativeBased
+                - WebExpressionVoter(AccessDecisionVoters)
+                    - SecurityExpressionHandler

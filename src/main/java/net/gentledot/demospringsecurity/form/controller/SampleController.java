@@ -17,9 +17,9 @@ public class SampleController {
     }
 
     @GetMapping("/")
-    public String index(Model model, Principal principal){
+    public String index(Model model, Principal principal) {
         String message = "Hello, Spring Security.";
-        if (principal != null){
+        if (principal != null) {
             message = "Hello, " + principal.getName();
         }
 
@@ -28,22 +28,27 @@ public class SampleController {
     }
 
     @GetMapping("/info")
-    public String info(Model model){
+    public String info(Model model) {
         model.addAttribute("message", "Hello, this is info page");
         return "sample/info";
     }
 
     @GetMapping("/dashboard")
-    public String dashboard(Model model, Principal principal){
+    public String dashboard(Model model, Principal principal) {
         model.addAttribute("message", "Hello, " + principal.getName());
         sampleService.dashboard();
         return "sample/dashboard";
     }
 
     @GetMapping("/admin")
-    public String admin(Model model, Principal principal){
+    public String admin(Model model, Principal principal) {
         model.addAttribute("message", "Hello, " + principal.getName() + "! You are logged in as Admin.");
         return "sample/admin";
+    }
+
+    public String user(Model model, Principal principal) {
+        model.addAttribute("message", "Hello, User. " + principal.getName());
+        return "sample/user";
     }
 
 }
