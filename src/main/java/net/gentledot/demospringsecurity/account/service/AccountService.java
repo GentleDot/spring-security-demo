@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class AccountService implements UserDetailsService {
 
-    // TODO {noop}123
     private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
 

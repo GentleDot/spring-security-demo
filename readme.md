@@ -11,6 +11,8 @@
         - [커스터마이징 : inMemory User](#Customizing_inMemory-User-추가)
         - [커스터마이징 : JPA 연동하여 User 생성](#Customizing_JPA-연동)
         - [커스터마이징 : PasswordEncoder](#Customizing_PasswordEncoder)
+    - [Spring Security Architecture](#Spring-Security-Architecture)
+        - [SecurityContextHolder와 Authentication](#SecurityContextHolder와-Authentication)
 
 ## 목표
 1. Spring Security Form 인증 학습
@@ -546,3 +548,143 @@ public class AccountControllerTest {
     }
 }
 ```
+
+### Spring Security Architecture
+
+> 출처 : [스프링 시큐리티 / 백기선](https://www.inflearn.com/course/%EB%B0%B1%EA%B8%B0%EC%84%A0-%EC%8A%A4%ED%94%84%EB%A7%81-%EC%8B%9C%ED%81%90%EB%A6%AC%ED%8B%B0/lecture/22894) 
+![Spring Security Architecture](img/security_architecture.jpg "스프링 시큐리티의 구조")
+
+
+#### SecurityContextHolder와 Authentication
+
+```
+package net.gentledot.demospringsecurity.account.service;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+
+import java.util.Collection;
+
+@Service
+public class SampleService {
+    public void dashboard() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Object principal = authentication.getPrincipal();
+        Collection<? extends GrantedAuthority> authorities = authentication.getAuthorities();
+        Object credentials = authentication.getCredentials();
+        boolean authenticated = authentication.isAuthenticated();
+    }
+}
+```
+
+```
+// authentication
+authentication = {UsernamePasswordAuthenticationToken@10822} "org.springframework.security.authentication.UsernamePasswordAuthenticationToken@428ccf1b: Principal: org.springframework.security.core.userdetails.User@6924ddf: Username: test1; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER; Credentials: [PROTECTED]; Authenticated: true; Details: org.springframework.security.web.authentication.WebAuthenticationDetails@380f4: RemoteIpAddress: 0:0:0:0:0:0:0:1; SessionId: 912325EFB6D771F9DC1B9543A8820917; Granted Authorities: ROLE_USER"
+principal = {User@10825} "org.springframework.security.core.userdetails.User@6924ddf: Username: test1; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER"
+credentials = null
+authorities = {Collections$UnmodifiableRandomAccessList@10828}  size = 1
+details = {WebAuthenticationDetails@10833} "org.springframework.security.web.authentication.WebAuthenticationDetails@380f4: RemoteIpAddress: 0:0:0:0:0:0:0:1; SessionId: 912325EFB6D771F9DC1B9543A8820917"
+authenticated = true
+
+// principal
+principal = {User@10825} "org.springframework.security.core.userdetails.User@6924ddf: Username: test1; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER"
+password = null
+username = "test1"
+authorities = {Collections$UnmodifiableSet@10837}  size = 1
+accountNonExpired = true
+accountNonLocked = true
+credentialsNonExpired = true
+enabled = true
+
+// authorities
+authorities = {Collections$UnmodifiableRandomAccessList@10828}  size = 1
+0 = {SimpleGrantedAuthority@10839} "ROLE_USER"
+role = "ROLE_USER"
+value = {byte[9]@10841} 
+coder = 0
+hash = -1142751756
+```
+
+- SecurityContextHolder
+    ![SecurityContextHolder](img/security_context_holder.jpg "SecurityContextHolder 구조")
+    
+    - SecurityContext 제공, 기본적으로 ThreadLocal을 사용한다.
+    - SecurityContext는 Authentication를 제공
+
+- Authentication
+    - Principal
+    - GrantAuthority
+
+- Principal
+    - “누구"에 해당하는 정보.
+    - UserDetailsService에서 리턴한 그 객체.
+        ```
+        // net.gentledot.demospringsecurity.config
+        @Autowired
+        AccountService accountService;
+    
+        @Override
+        protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+            auth.userDetailsService(accountService);
+        }
+        ```
+    - 객체는 UserDetails 타입
+    
+- GrantAuthority
+    - “ROLE_USER”, “ROLE_ADMIN”등 Principal이 가지고 있는 **권한**을 나타낸다.
+    - 인증 이후, 인가 및 권한 확인할 때 이 정보를 참조한다.
+    
+- UserDetails
+    - 애플리케이션이 가지고 있는 유저 정보와 스프링 시큐리티가 사용하는 Authentication 객체 사이의 어댑터.
+
+- UserDetailsService
+    - 유저 정보를 UserDetails 타입으로 가져오는 DAO (Data Access Object) 인터페이스.
+    - 구현은 마음대로!
+
+    ```
+    package net.gentledot.demospringsecurity.account.service;
+    
+    import net.gentledot.demospringsecurity.account.domain.Account;
+    import net.gentledot.demospringsecurity.account.repository.AccountRepository;
+    import org.springframework.security.core.userdetails.User;
+    import org.springframework.security.core.userdetails.UserDetails;
+    import org.springframework.security.core.userdetails.UserDetailsService;
+    import org.springframework.security.core.userdetails.UsernameNotFoundException;
+    import org.springframework.security.crypto.password.PasswordEncoder;
+    import org.springframework.stereotype.Service;
+    
+    @Service
+    public class AccountService implements UserDetailsService {
+    
+        private final AccountRepository accountRepository;
+        private final PasswordEncoder passwordEncoder;
+    
+        public AccountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) {
+            this.accountRepository = accountRepository;
+            this.passwordEncoder = passwordEncoder;
+        }
+    
+        // username을 받아 해당하는 user 정보를 가져와 UserDetails로 return
+        @Override
+        public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+            Account account = accountRepository.findByUsername(username);
+    
+            if (username == null) {
+                throw new UsernameNotFoundException(username);
+            }
+    
+            return User.builder()
+                    .username(account.getUsername())
+                    .password(account.getPassword())
+                    .roles(account.getRole())
+                    .build();
+        }
+
+        public Account createUser(Account account) {
+            account.encodePassword(passwordEncoder);
+            return  accountRepository.save(account);
+        }
+    }
+    ```
