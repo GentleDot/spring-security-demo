@@ -12,7 +12,8 @@
         - [커스터마이징 : JPA 연동하여 User 생성](#Customizing_JPA-연동)
         - [커스터마이징 : PasswordEncoder](#Customizing_PasswordEncoder)
     - [Spring Security Architecture](#Spring-Security-Architecture)
-        - [SecurityContextHolder와 Authentication](#SecurityContextHolder와-Authentication)
+        - [SecurityContextHolder와 Authentication의 위치](#SecurityContextHolder와-Authentication)
+        - [AuthenticationManager와 Authentication](#AuthenticationManager와-Authentication)
 
 ## 목표
 1. Spring Security Form 인증 학습
@@ -688,3 +689,125 @@ hash = -1142751756
         }
     }
     ```
+
+#### AuthenticationManager와 Authentication
+Authentication authenticate(Authentication authentication) throws AuthenticationException;
+
+- 스프링 시큐리티에서 인증(Authentication)은 AuthenticationManager가 한다.
+    - 인자로 받은 Authentication이 유효한 인증인지 확인​하고 ​Authentication 객체를 리턴​한다.
+    - 인증을 확인하는 과정에서 비활성 계정, 잘못된 비번, 잠긴 계정 등의 에러를 던질 수 있다.
+
+```
+    package org.springframework.security.authentication;
+    
+    import org.springframework.security.core.Authentication;
+    import org.springframework.security.core.AuthenticationException;
+    
+    /**
+     * Processes an {@link Authentication} request.
+     *
+     * @author Ben Alex
+     */
+    public interface AuthenticationManager {
+  
+    	/**
+    	 * Attempts to authenticate the passed {@link Authentication} object, returning a
+    	 * fully populated <code>Authentication</code> object (including granted authorities)
+    	 * if successful.
+    	 * exceptions:
+    	 * <ul>
+    	 * <li>A {@link DisabledException} must be thrown if an account is disabled and the
+    	 * <code>AuthenticationManager</code> can test for this state.</li>
+    	 * <li>A {@link LockedException} must be thrown if an account is locked and the
+    	 * <code>AuthenticationManager</code> can test for account locking.</li>
+    	 * <li>A {@link BadCredentialsException} must be thrown if incorrect credentials are
+    	 * presented. Whilst the above exceptions are optional, an
+    	 * <code>AuthenticationManager</code> must <B>always</B> test credentials.</li>
+    	 * </ul>
+         */
+    	Authentication authenticate(Authentication authentication)
+    			throws AuthenticationException;
+    }
+```
+
+- 구현하는 객체
+    - ProviderManager
+    - 또는 AuthenticationManager 구현
+    
+```
+// ProviderManager.class
+for (AuthenticationProvider provider : getProviders()) {
+    if (!provider.supports(toTest)) {
+        continue;
+    }
+
+    if (debug) {
+        logger.debug("Authentication attempt using "
+                + provider.getClass().getName());
+    }
+
+    try {
+        result = provider.authenticate(authentication);
+
+        if (result != null) {
+            copyDetails(authentication, result);
+            break;
+        }
+    }
+    catch (AccountStatusException | InternalAuthenticationServiceException e) {
+        prepareException(e, authentication);
+        // SEC-546: Avoid polling additional providers if auth failure is due to
+        // invalid account status
+        throw e;
+    } catch (AuthenticationException e) {
+        lastException = e;
+    }
+}
+```
+
+- Provider
+   -  public abstract class AbstractUserDetailsAuthenticationProvider
+        - public class DaoAuthenticationProvider extends AbstractUserDetailsAuthenticationProvider
+            ```
+            protected final UserDetails retrieveUser(String username,
+                    UsernamePasswordAuthenticationToken authentication)
+                    throws AuthenticationException {
+                prepareTimingAttackProtection();
+                try {
+                    UserDetails loadedUser = this.getUserDetailsService().loadUserByUsername(username);
+                    if (loadedUser == null) {
+                        throw new InternalAuthenticationServiceException(
+                                "UserDetailsService returned null, which is an interface contract violation");
+                    }
+                    return loadedUser;
+                }
+                catch (UsernameNotFoundException ex) {
+                    mitigateAgainstTimingAttack(authentication);
+                    throw ex;
+                }
+                catch (InternalAuthenticationServiceException ex) {
+                    throw ex;
+                }
+                catch (Exception ex) {
+                    throw new InternalAuthenticationServiceException(ex.getMessage(), ex);
+                }
+            }
+            ```
+            - UserDetailService
+                - AccountService extend UserDetailService
+                
+- 인자로 받은 Authentication
+    - 사용자가 입력한 인증에 필요한 정보(username, password)로 만든 객체. (폼 인증인 경우)
+    - Authentication
+        - Principal: “test1”
+        - Credentials: “test123”
+
+- 유효한 인증인지 확인
+    - 사용자가 입력한 password가 UserDetailsService를 통해 읽어온 UserDetails 객체에 들어있는 password와 일치하는지 확인
+    - 해당 사용자 계정이 잠겨 있진 않은지, 비활성 계정은 아닌지 등 확인
+
+- Authentication 객체를 리턴
+    - Authentication
+        - Principal: UserDetailsService에서 리턴한 객체 (AccountService에서 리턴한 객체인 User)
+    - Credentials: Null
+    - GrantedAuthorities
