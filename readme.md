@@ -14,7 +14,9 @@
     - [Spring Security Architecture](#Spring-Security-Architecture)
         - [SecurityContextHolder와 Authentication의 위치](#SecurityContextHolder와-Authentication)
         - [AuthenticationManager와 Authentication](#AuthenticationManager와-Authentication)
-
+        - [ThreadLocal](#ThreadLocal)
+        - [Spring Security Filter와 FilterChainProxy](#Spring-Security-Filter와-FilterChainProxy)
+        
 ## 목표
 1. Spring Security Form 인증 학습
 1. Spring Security의 아키텍쳐 확인
@@ -552,7 +554,7 @@ public class AccountControllerTest {
 
 ### Spring Security Architecture
 
-> 출처 : [스프링 시큐리티 / 백기선](https://www.inflearn.com/course/%EB%B0%B1%EA%B8%B0%EC%84%A0-%EC%8A%A4%ED%94%84%EB%A7%81-%EC%8B%9C%ED%81%90%EB%A6%AC%ED%8B%B0/lecture/22894) 
+> 출처 : [스프링 시큐리티 / 백기선](https://www.inflearn.com/course/%EB%B0%B1%EA%B8%B0%EC%84%A0-%EC%8A%A4%ED%94%84%EB%A7%81-%EC%8B%9C%ED%81%90%EB%A6%AC%ED%8B%B0/lecture/22894)   
 ![Spring Security Architecture](img/security_architecture.jpg "스프링 시큐리티의 구조")
 
 
@@ -811,3 +813,88 @@ for (AuthenticationProvider provider : getProviders()) {
         - Principal: UserDetailsService에서 리턴한 객체 (AccountService에서 리턴한 객체인 User)
     - Credentials: Null
     - GrantedAuthorities
+
+#### ThreadLocal
+- Java.lang 패키지에서 제공하는 thread 범위 변수. 즉, thread 수준의 데이터 저장소.
+    - SecurityContextHolder의 기본 전략.
+    - 같은 thread 내에서만 공유.
+    - 따라서 같은 thread라면 해당 데이터를 메소드 매개변수로 넘겨줄 필요 없음.
+
+```
+public class AccountContext {
+    private static final ThreadLocal<Account> ACCOUNT_THREAD_LOCAL = new ThreadLocal<>();
+
+    public static void setAccount(Account account) {
+        ACCOUNT_THREAD_LOCAL.set(account);
+    }
+    public static Account getAccount() {
+        return ACCOUNT_THREAD_LOCAL.get();
+    }
+}
+```
+
+- 인증된 SecurityContextHolder (Authentication 객체)는 어떻게 되는가?
+    - public class SecurityContextPersistenceFilter extends GenericFilterBean
+        - SecurityContext를 HTTP session에 캐시(기본 전략)하여 여러 요청에서 Authentication을 공유하는 필터.
+        - SecurityContextRepository를 교체하여 세션을 HTTP session이 아닌 다른 곳에 저장하는 것도 가능하다.
+            - public class HttpSessionSecurityContextRepository implements SecurityContextRepository
+    
+    - public class UsernamePasswordAuthenticationFilter extends
+      		AbstractAuthenticationProcessingFilter
+        - 폼 인증을 처리하는 시큐리티 필터
+        - 인증된 Authentication 객체를 SecurityContextHolder에 넣어주는 필터
+        - SecurityContextHolder.getContext().setAuthentication(authentication)
+
+
+#### Spring Security Filter와 FilterChainProxy
+- 스프링 시큐리티가 제공하는 필터들
+1. WebAsyncManagerIntergrationFilter
+1. **SecurityContextPersistenceFilter**
+1. HeaderWriterFilter
+1. CsrfFilter
+1. LogoutFilter
+1. **UsernamePasswordAuthenticationFilter**
+1. DefaultLoginPageGeneratingFilter
+1. DefaultLogoutPageGeneratingFilter
+1. BasicAuthenticationFilter
+1. RequestCacheAwareFtiler
+1. SecurityContextHolderAwareReqeustFilter
+1. AnonymouseAuthenticationFilter
+1. SessionManagementFilter
+1. ExeptionTranslationFilter
+1. FilterSecurityInterceptor
+
+
+- public class FilterChainProxy extends GenericFilterBean
+    - filter 목록 가져오기
+        ```
+        private List<Filter> getFilters(HttpServletRequest request) {
+            for (SecurityFilterChain chain : filterChains) {
+                if (chain.matches(request)) {
+                    return chain.getFilters();
+                }
+            }
+            return null;
+        }
+        ```
+    
+    - filter 목록의 구성은 public class SecurityConfig extends WebSecurityConfigurerAdapter
+        1. WebSecurityConfigurerAdapter 상속 객체가 여럿일 때 @Order
+        1. http.antMatcher()
+
+*** [Difference between antMatcher and mvcMatcher](https://stackoverflow.com/questions/50536292/difference-between-antmatcher-and-mvcmatcher)
+> Generally mvcMatcher is more secure than an antMatcher. As an example:
+> - antMatchers("/secured") matches only the exact /secured URL
+> - mvcMatchers("/secured") matches /secured as well as /secured/, /secured.html, /secured.xyz
+
+- DelegatingFilterProxy
+    - 일반적인 servlet 필터
+    - servlet 필터 처리를 스프링에 들어있는 빈으로 위임하고 싶을 때 사용하는 servlet 필터.
+    - 타겟 빈 이름을 설정한다.
+    - 스프링 부트 없이 스프링 시큐리티 설정할 때는 AbstractSecurityWebApplicationInitializer를 사용해서 등록.
+    - 스프링 부트를 사용할 때는 자동으로 등록 된다. (SecurityFilterAutoConfiguration)
+        - public abstract class AbstractSecurityWebApplicationInitializer
+		implements WebApplicationInitializer
+		    - public static final String DEFAULT_FILTER_NAME = "springSecurityFilterChain"
+		    
+    
