@@ -19,6 +19,9 @@
         - [AccessControl(Authorization)](#AccessControl(Authorization))
         - [FilterSecurityInterceptor](#FilterSecurityInterceptor)
         - [Architecture 정리](#Architecture-정리)
+    - [Web Application Security](#Web-Application-Security)
+        - [ignoring](#ignoring)
+        - [WebAsyncManagerIntegrationFilter](#WebAsyncManagerIntegrationFilter)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -1220,3 +1223,53 @@ public void configure(WebSecurity web) throws Exception {
     - 동적 resource는 http.authorizeRequests()로 처리하는 것을 권장.
     - 정적 resource는 WebSecurity.ignore()를 권장하며 예외적인 정적 자원 (인증이 필요한
       정적자원이 있는 경우)는 http.authorizeRequests()를 사용할 수 있습니다.
+      
+      
+#### WebAsyncManagerIntegrationFilter
+Async 웹 MVC를 지원하는 필터
+
+- 스프링 MVC의 Async 기능(핸들러에서 Callable을 리턴할 수 있는 기능)을 사용할 때에도 SecurityContext를 공유하도록 도와주는 필터.
+    - PreProcess: SecurityContext를 설정한다.
+    - Callable: 비록 다른 쓰레드지만 그 안에서는 동일한 SecurityContext를 참조할 수 있다.
+    - PostProcess: SecurityContext를 정리(clean up)한다.
+
+```
+// SecurityContext = threadLocal / async = 다른 thread 사용
+// WebAsyncManagerIntegrationFilter : async 환경에서도 동일한 SecurityContext를 사용할 수 있도록 지원하는 필터
+@GetMapping("/async-handler")
+@ResponseBody
+public Callable<String> asyncHandler() {
+    // tomcat이 할당한 NIO thread
+    SecurityLogger.log("===MVC===");
+
+    // request를 처리하는 thread를 반환하고 Callable에서의 처리가 완료되면 그 응답을 보냄.
+    return () -> {
+        // 별도의 thread
+        SecurityLogger.log("===Callable===");
+        return "Async Handler";
+    };
+}
+```
+```
+2019-12-22 01:06:10.552 DEBUG 15168 --- [nio-8080-exec-8] o.j.s.OpenEntityManagerInViewInterceptor : Opening JPA EntityManager in OpenEntityManagerInViewInterceptor
+===MVC===
+thread : http-nio-8080-exec-8
+Thread[http-nio-8080-exec-8,5,main]
+principal : org.springframework.security.core.userdetails.User@364492: Username: test; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER
+2019-12-22 01:06:10.556 DEBUG 15168 --- [nio-8080-exec-8] o.apache.catalina.core.AsyncContextImpl  : Req:     null  CReq:     null  RP:     null  Stage: -  Thread: http-nio-8080-exec-8  State:                  N/A  Method: Constructor  URI: N/A
+2019-12-22 01:06:10.557 DEBUG 15168 --- [nio-8080-exec-8] o.apache.catalina.core.AsyncContextImpl  : Firing onStartAsync() event for any AsyncListeners
+2019-12-22 01:06:10.558 DEBUG 15168 --- [nio-8080-exec-8] o.s.w.c.request.async.WebAsyncManager    : Started async request
+2019-12-22 01:06:10.559 DEBUG 15168 --- [nio-8080-exec-8] o.s.web.servlet.DispatcherServlet        : Exiting but response remains open for further handling
+2019-12-22 01:06:10.559 DEBUG 15168 --- [nio-8080-exec-8] o.s.s.w.a.ExceptionTranslationFilter     : Chain processed normally
+2019-12-22 01:06:10.559 DEBUG 15168 --- [nio-8080-exec-8] o.s.s.w.header.writers.HstsHeaderWriter  : Not injecting HSTS header since it did not match the requestMatcher org.springframework.security.web.header.writers.HstsHeaderWriter$SecureRequestMatcher@53cc9bbb
+2019-12-22 01:06:10.559 DEBUG 15168 --- [nio-8080-exec-8] s.s.w.c.SecurityContextPersistenceFilter : SecurityContextHolder now cleared, as request processing completed
+===Callable===
+thread : task-1
+Thread[task-1,5,main]
+principal : org.springframework.security.core.userdetails.User@364492: Username: test; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER
+2019-12-22 01:06:10.559 DEBUG 15168 --- [nio-8080-exec-8] o.apache.coyote.http11.Http11Processor   : Socket: [org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper@5f2f0812:org.apache.tomcat.util.net.NioChannel@3de73384:java.nio.channels.SocketChannel[connected local=/0:0:0:0:0:0:0:1:8080 remote=/0:0:0:0:0:0:0:1:4555]], Status in: [OPEN_READ], State out: [LONG]
+2019-12-22 01:06:10.559 DEBUG 15168 --- [         task-1] o.s.w.c.request.async.WebAsyncManager    : Async result set, dispatch to /async-handler
+2019-12-22 01:06:10.559 DEBUG 15168 --- [nio-8080-exec-8] o.apache.coyote.http11.Http11Processor   : Socket: [org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper@5f2f0812:org.apache.tomcat.util.net.NioChannel@3de73384:java.nio.channels.SocketChannel[connected local=/0:0:0:0:0:0:0:1:8080 remote=/0:0:0:0:0:0:0:1:4555]], State after async post processing: [LONG]
+2019-12-22 01:06:10.560 DEBUG 15168 --- [         task-1] o.apache.catalina.core.AsyncContextImpl  : Req:  e094d3a  CReq:   ceb28b  RP:  4f1264a  Stage: 7  Thread:               task-1  State:                  N/A  Method: dispatch     URI: /async-handler
+2019-12-22 01:06:10.561 DEBUG 15168 --- [io-8080-exec-10] o.a.c.authenticator.AuthenticatorBase    : Security checking request GET /async-handler
+```
