@@ -1179,3 +1179,44 @@ catch (AccessDeniedException accessDeniedException) {
             - AffirmativeBased
                 - WebExpressionVoter(AccessDecisionVoters)
                     - SecurityExpressionHandler
+
+
+### Web Application Security
+
+#### ignoring
+WebSecurity의 ignoring()을 사용해서 시큐리티 필터 적용을 제외할 요청을 설정할 수 있다.
+
+```
+@Override
+public void configure(WebSecurity web) throws Exception {
+//        web.ignoring().mvcMatchers("/favicon.ico");
+    web.ignoring().requestMatchers(PathRequest.toStaticResources().atCommonLocations());
+}
+```
+
+- web.ignoring()
+    - .requestMatchers()
+    
+        [requestMatchers](https://docs.spring.io/spring-security/site/docs/4.2.13.RELEASE/apidocs/org/springframework/security/config/annotation/web/builders/HttpSecurity.html#requestMatchers--)
+        >public HttpSecurity.RequestMatcherConfigurer requestMatchers()
+        Allows specifying which HttpServletRequest instances this HttpSecurity will be invoked on. This method allows for easily invoking the HttpSecurity for multiple different RequestMatcher instances. If only a single RequestMatcher is necessary consider using mvcMatcher(String), antMatcher(String), regexMatcher(String), or requestMatcher(RequestMatcher).
+        Invoking requestMatchers() will not override previous invocations of mvcMatcher(String)}, requestMatchers(), antMatcher(String), regexMatcher(String), and requestMatcher(RequestMatcher).
+    - .requestMatcher(RequestMatcher matcher)
+    - .mvcMatchers(String mvcPatterns)
+    - .antMatchers(String antPatterns)
+    - .regexMatchers(String regexPatterns)
+
+- PathRequest
+    - org.springframework.boot.autoconfigure.security.servlet.PathRequest
+    - Spring Boot가 제공하는 PathRequest를 사용해서 정적 지원 요청을 필터를 적용하지 않도록 설정.
+ 
+
+- http.authorizeRequests()
+.requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
+    - 위의 web.ignoring()와 같은 결과가 나오지만...
+    - security filter가 적용된다는 차이가 있음.
+
+- 정적 / 동적 resource에 따른 처리방식.
+    - 동적 resource는 http.authorizeRequests()로 처리하는 것을 권장.
+    - 정적 resource는 WebSecurity.ignore()를 권장하며 예외적인 정적 자원 (인증이 필요한
+      정적자원이 있는 경우)는 http.authorizeRequests()를 사용할 수 있습니다.
