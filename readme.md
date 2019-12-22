@@ -24,6 +24,7 @@
         - [WebAsyncManagerIntegrationFilter](#WebAsyncManagerIntegrationFilter)
         - [SecurityContextPersistenceFilter](#SecurityContextPersistenceFilter)
         - [HeaderWriterFilter](#HeaderWriterFilter)
+        - [CSRF Attack 방지 필터](#CsrfFilter)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -1472,3 +1473,271 @@ principal : org.springframework.security.core.userdetails.User@364492: Username:
         X-Frame-Options : ALLOW FROM http://www.gentledot.net   // www.gentledot.net에 대해서만 허용합니다.
         ```
 
+
+#### CsrfFilter
+사이트 간 요청 위조(Cross-site Request Forgery) 어택 방지 필터
+
+![CSRF 예제](img/csrf_example.jpg)
+
+- 인증된 유저의 계정을 사용해 악의적인 변경 요청을 만들어 보내는 기법.
+    - [CSRF](https://www.owasp.org/index.php/Cross-Site_Request_Forgery_\(CSRF\))
+    - [CSRF - 나무위키](https://namu.wiki/w/CSRF)
+
+- CORS를 사용할 때 특히 주의 해야 함.
+    - 타 도메인에서 보내오는 요청을 허용하기 때문에...
+    - [CORS](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing)
+
+-  CsrfFilter는 의도한 사용자만 리소스를 변경할 수 있도록 허용하는 필터
+    - public final class CsrfFilter extends OncePerRequestFilter
+    - CSRF 토큰을 사용하여 방지.
+        - request.setAttribute(CsrfToken.class.getName(), csrfToken)
+        - request.setAttribute(csrfToken.getParameterName(), csrfToken)
+        - if (!csrfToken.getToken().equals(actualToken)) {}
+        
+        ```
+        /*
+         * (non-Javadoc)
+         *
+         * @see
+         * org.springframework.web.filter.OncePerRequestFilter#doFilterInternal(javax.servlet
+         * .http.HttpServletRequest, javax.servlet.http.HttpServletResponse,
+         * javax.servlet.FilterChain)
+         */
+        @Override
+        protected void doFilterInternal(HttpServletRequest request,
+                HttpServletResponse response, FilterChain filterChain)
+                        throws ServletException, IOException {
+            request.setAttribute(HttpServletResponse.class.getName(), response);
+    
+            CsrfToken csrfToken = this.tokenRepository.loadToken(request);
+            final boolean missingToken = csrfToken == null;
+            if (missingToken) {
+                csrfToken = this.tokenRepository.generateToken(request);
+                this.tokenRepository.saveToken(csrfToken, request, response);
+            }
+            request.setAttribute(CsrfToken.class.getName(), csrfToken);
+            request.setAttribute(csrfToken.getParameterName(), csrfToken);
+    
+            // get 요청
+            if (!this.requireCsrfProtectionMatcher.matches(request)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+            
+            // post 요청
+            String actualToken = request.getHeader(csrfToken.getHeaderName());
+            if (actualToken == null) {
+                actualToken = request.getParameter(csrfToken.getParameterName());
+            }
+            if (!csrfToken.getToken().equals(actualToken)) {
+                if (this.logger.isDebugEnabled()) {
+                    this.logger.debug("Invalid CSRF token found for "
+                            + UrlUtils.buildFullRequestUrl(request));
+                }
+                if (missingToken) {
+                    this.accessDeniedHandler.handle(request, response,
+                            new MissingCsrfTokenException(actualToken));
+                }
+                else {
+                    this.accessDeniedHandler.handle(request, response,
+                            new InvalidCsrfTokenException(csrfToken, actualToken));
+                }
+                return;
+            }
+    
+            filterChain.doFilter(request, response);
+        }
+        ```
+      
+        ```
+        // http://localhost:8080/login
+        <form class="form-signin" method="post" action="/login">
+            <h2 class="form-signin-heading">Please sign in</h2>
+            <p>
+              <label for="username" class="sr-only">Username</label>
+              <input type="text" id="username" name="username" class="form-control" placeholder="Username" required="" autofocus="">
+            </p>
+            <p>
+              <label for="password" class="sr-only">Password</label>
+              <input type="password" id="password" name="password" class="form-control" placeholder="Password" required="">
+            </p>
+            <input name="_csrf" type="hidden" value="fe85f228-74d6-4b0f-b141-f68ec9087309">
+            <button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
+        </form>
+        ```
+    
+- CsrfFilter 사용 중지 방법
+    ```
+    // HttpSecurity 설정에서 ...
+    http.csrf().disable();
+    ```
+  
+- CSRF 토큰 사용 예시
+    - JSP에서 스프링 MVC가 제공하는 \<form:form> 태그 또는 타임리프 2.1+ 버전을 사용할 때 폼에 CRSF 히든 필드가 기본으로 생성 됨.
+    
+    ```
+    package net.gentledot.demospringsecurity.account.controller;
+    
+    import net.gentledot.demospringsecurity.account.domain.Account;
+    import net.gentledot.demospringsecurity.account.service.AccountService;
+    import org.springframework.stereotype.Controller;
+    import org.springframework.ui.Model;
+    import org.springframework.web.bind.annotation.GetMapping;
+    import org.springframework.web.bind.annotation.ModelAttribute;
+    import org.springframework.web.bind.annotation.PostMapping;
+    import org.springframework.web.bind.annotation.RequestMapping;
+    
+    @Controller
+    @RequestMapping("/signup")
+    public class SignUpController {
+    
+        private final AccountService accountService;
+    
+        public SignUpController(AccountService accountService) {
+            this.accountService = accountService;
+        }
+    
+        @GetMapping
+        public String signUpForm(Model model) {
+            model.addAttribute("account", new Account());
+    
+            return "sample/signup";
+        }
+    
+        @PostMapping
+        public String processSignUp(@ModelAttribute Account account) {
+            account.setRole("USER");
+            accountService.createUser(account);
+    
+            return "redirect:/";
+        }
+    }
+    ```
+    
+    ```
+    // signup.html
+    <!DOCTYPE html>
+    <html lang="kr" xmlns:th="http://www.thymeleaf.org">
+    <head>
+        <meta charset="UTF-8">
+        <title>SignUp</title>
+    </head>
+    <body>
+        <h1>SignUp!</h1>
+        <form action="/signup" th:action="@{/signup}" th:object="${account}" method="post">
+            <div>
+                <p>Username : <input type="text" th:field="*{username}"/></p>
+                <p>Password : <input type="text" th:field="*{password}"/></p>
+            </div>
+            <div>
+                <p><input type="submit" value="SignUp!"></p>
+            </div>
+        </form>
+    </body>
+    </html>
+    ```
+  
+    ```
+    package net.gentledot.demospringsecurity.account.controller;
+    
+    import org.junit.Test;
+    import org.junit.runner.RunWith;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+    import org.springframework.boot.test.context.SpringBootTest;
+    import org.springframework.test.context.junit4.SpringRunner;
+    import org.springframework.test.web.servlet.MockMvc;
+    import org.springframework.test.web.servlet.ResultActions;
+    
+    import static org.hamcrest.Matchers.containsString;
+    import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+    import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+    import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+    import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+    import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+    import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+    
+    @RunWith(SpringRunner.class)
+    @SpringBootTest
+    @AutoConfigureMockMvc
+    public class SignUpControllerTest {
+    
+        @Autowired
+        MockMvc mockMvc;
+    
+        @Test
+        public void signUpForm() throws Exception {
+            // given
+    
+            // when
+            ResultActions actions = mockMvc.perform(get("/signup"));
+    
+            // then
+            actions.andDo(print())
+                    .andExpect(content().string(containsString("_csrf")));
+        }
+    
+        @Test
+        public void processSignUp() throws Exception {
+            // given
+    
+            // when
+            ResultActions actions = mockMvc.perform(post("/signup")
+                    .param("username", "test")
+                    .param("password", "qwer!@#$")
+                    .with(csrf()));
+    
+            // then
+            actions.andDo(print())
+                    .andExpect(status().is3xxRedirection());
+        }
+    }
+    ```
+    
+    ```
+    // GET Request의 Response
+    // <input type="hidden" name="_csrf" value="581d322b-72b8-4172-9527-e719200b4850"/> 가 자동 생성되어 있음.
+  
+    MockHttpServletResponse:
+               Status = 200
+        Error message = null
+              Headers = [Content-Language:"en", Content-Type:"text/html;charset=UTF-8", X-Content-Type-Options:"nosniff", X-XSS-Protection:"1; mode=block", Cache-Control:"no-cache, no-store, max-age=0, must-revalidate", Pragma:"no-cache", Expires:"0", X-Frame-Options:"DENY"]
+         Content type = text/html;charset=UTF-8
+                 Body = <!DOCTYPE html>
+    <html lang="kr">
+    <head>
+        <meta charset="UTF-8">
+        <title>SignUp</title>
+    </head>
+    <body>
+        <h1>SignUp!</h1>
+        <form action="/signup" method="post"><input type="hidden" name="_csrf" value="581d322b-72b8-4172-9527-e719200b4850"/>
+            <div>
+                <p>Username : <input type="text" id="username" name="username" value=""/></p>
+                <p>Password : <input type="text" id="password" name="password" value=""/></p>
+            </div>
+            <div>
+                <p><input type="submit" value="SignUp!"></p>
+            </div>
+        </form>
+    </body>
+    </html>
+        Forwarded URL = null
+       Redirected URL = null
+              Cookies = []
+  
+    // POST Request의 Response
+    MockHttpServletResponse:
+               Status = 302
+        Error message = null
+              Headers = [Content-Language:"en", X-Content-Type-Options:"nosniff", X-XSS-Protection:"1; mode=block", Cache-Control:"no-cache, no-store, max-age=0, must-revalidate", Pragma:"no-cache", Expires:"0", X-Frame-Options:"DENY", Location:"/"]
+         Content type = null
+                 Body = 
+        Forwarded URL = null
+       Redirected URL = /
+              Cookies = []
+    ```
+  
+    - TEST 상에서 csrf 설정이 없으면 403(forbidden) 되어 테스트가 실패.
+        - .with(csrf()) 추가 필요.
+        - org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf    
