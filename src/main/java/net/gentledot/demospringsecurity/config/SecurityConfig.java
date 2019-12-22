@@ -11,6 +11,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.builders.WebSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.FilterInvocation;
 import org.springframework.security.web.access.expression.DefaultWebSecurityExpressionHandler;
 
@@ -20,6 +21,13 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
     @Autowired
     AccountService accountService;
+
+    @Override
+    public void configure(WebSecurity web) throws Exception {
+//        web.ignoring().mvcMatchers("/favicon.ico");
+//        web.ignoring().requestMatchers(PathRequest.toStaticResources().at());
+        web.ignoring().requestMatchers(PathRequest.toStaticResources().atCommonLocations());
+    }
 
     @Override
     protected void configure(HttpSecurity http) throws Exception {
@@ -44,13 +52,9 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         http.formLogin();
         // http의 basic oauth ??
         http.httpBasic();
-    }
 
-    @Override
-    public void configure(WebSecurity web) throws Exception {
-//        web.ignoring().mvcMatchers("/favicon.ico");
-//        web.ignoring().requestMatchers(PathRequest.toStaticResources().at());
-        web.ignoring().requestMatchers(PathRequest.toStaticResources().atCommonLocations());
+        // 하위 Thread에게 ContextHolder가 공유되도록 설정
+        SecurityContextHolder.setStrategyName(SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);
     }
 
     //    @Override

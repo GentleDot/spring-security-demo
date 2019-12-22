@@ -1273,3 +1273,82 @@ principal : org.springframework.security.core.userdetails.User@364492: Username:
 2019-12-22 01:06:10.560 DEBUG 15168 --- [         task-1] o.apache.catalina.core.AsyncContextImpl  : Req:  e094d3a  CReq:   ceb28b  RP:  4f1264a  Stage: 7  Thread:               task-1  State:                  N/A  Method: dispatch     URI: /async-handler
 2019-12-22 01:06:10.561 DEBUG 15168 --- [io-8080-exec-10] o.a.c.authenticator.AuthenticatorBase    : Security checking request GET /async-handler
 ```
+
+- SecurityContext와 @Async
+    - @Async 사용한 서비스 호출 시
+        - thread가 다름 (서비스는 하위 스레드를 생성)
+        - 따라서 SecurityContext를 공유받지 못함.
+     
+        ```
+        2019-12-22 23:25:32.775 DEBUG 18448 --- [nio-8080-exec-3] o.s.web.servlet.DispatcherServlet        : GET "/async-service", parameters={}
+        2019-12-22 23:25:32.775 DEBUG 18448 --- [nio-8080-exec-3] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped to net.gentledot.demospringsecurity.form.controller.SampleController#asyncService()
+        2019-12-22 23:25:32.775 DEBUG 18448 --- [nio-8080-exec-3] o.j.s.OpenEntityManagerInViewInterceptor : Opening JPA EntityManager in OpenEntityManagerInViewInterceptor
+        MVC before async service.
+        thread : http-nio-8080-exec-3
+        Thread[http-nio-8080-exec-3,5,main]
+        principal : org.springframework.security.core.userdetails.User@364492: Username: test; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER
+        MVC after async service.
+        thread : http-nio-8080-exec-3
+        Thread[http-nio-8080-exec-3,5,main]
+        principal : org.springframework.security.core.userdetails.User@364492: Username: test; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER
+        2019-12-22 23:25:32.780 DEBUG 18448 --- [nio-8080-exec-3] m.m.a.RequestResponseBodyMethodProcessor : Using 'text/html', given [text/html, application/xhtml+xml, image/webp, image/apng, application/xml;q=0.9, application/signed-exchange;v=b3;q=0.9, */*;q=0.8] and supported [text/plain, */*, text/plain, */*, application/json, application/*+json, application/json, application/*+json]
+        2019-12-22 23:25:32.780 DEBUG 18448 --- [nio-8080-exec-3] m.m.a.RequestResponseBodyMethodProcessor : Writing ["Async Service"]
+        2019-12-22 23:25:32.782 DEBUG 18448 --- [nio-8080-exec-3] o.s.s.w.header.writers.HstsHeaderWriter  : Not injecting HSTS header since it did not match the requestMatcher org.springframework.security.web.header.writers.HstsHeaderWriter$SecureRequestMatcher@2688df00
+        2019-12-22 23:25:32.783 DEBUG 18448 --- [nio-8080-exec-3] o.j.s.OpenEntityManagerInViewInterceptor : Closing JPA EntityManager in OpenEntityManagerInViewInterceptor
+        2019-12-22 23:25:32.783 DEBUG 18448 --- [nio-8080-exec-3] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+        2019-12-22 23:25:32.783 DEBUG 18448 --- [nio-8080-exec-3] o.s.s.w.a.ExceptionTranslationFilter     : Chain processed normally
+        2019-12-22 23:25:32.783 DEBUG 18448 --- [nio-8080-exec-3] s.s.w.c.SecurityContextPersistenceFilter : SecurityContextHolder now cleared, as request processing completed
+        2019-12-22 23:25:32.784 DEBUG 18448 --- [nio-8080-exec-3] o.a.tomcat.util.net.SocketWrapperBase    : Socket: [org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper@1034c0a8:org.apache.tomcat.util.net.NioChannel@3305a26c:java.nio.channels.SocketChannel[connected local=/0:0:0:0:0:0:0:1:8080 remote=/0:0:0:0:0:0:0:1:4528]], Read from buffer: [0]
+        in the async service.
+        thread : task-1
+        Thread[task-1,5,main]
+        2019-12-22 23:25:32.784 DEBUG 18448 --- [nio-8080-exec-3] org.apache.tomcat.util.net.NioEndpoint   : Socket: [org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper@1034c0a8:org.apache.tomcat.util.net.NioChannel@3305a26c:java.nio.channels.SocketChannel[connected local=/0:0:0:0:0:0:0:1:8080 remote=/0:0:0:0:0:0:0:1:4528]], Read direct from socket: [0]
+        2019-12-22 23:25:32.784 DEBUG 18448 --- [nio-8080-exec-3] o.apache.coyote.http11.Http11Processor   : Socket: [org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper@1034c0a8:org.apache.tomcat.util.net.NioChannel@3305a26c:java.nio.channels.SocketChannel[connected local=/0:0:0:0:0:0:0:1:8080 remote=/0:0:0:0:0:0:0:1:4528]], Status in: [OPEN_READ], State out: [OPEN]
+        2019-12-22 23:25:32.784 DEBUG 18448 --- [nio-8080-exec-3] org.apache.tomcat.util.net.NioEndpoint   : Registered read interest for [org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper@1034c0a8:org.apache.tomcat.util.net.NioChannel@3305a26c:java.nio.channels.SocketChannel[connected local=/0:0:0:0:0:0:0:1:8080 remote=/0:0:0:0:0:0:0:1:4528]]
+        2019-12-22 23:25:32.786 ERROR 18448 --- [         task-1] .a.i.SimpleAsyncUncaughtExceptionHandler : Unexpected exception occurred invoking async method: public void net.gentledot.demospringsecurity.account.service.SampleService.asyncService()
+        
+        java.lang.NullPointerException: null
+            at net.gentledot.demospringsecurity.common.SecurityLogger.log(SecurityLogger.java:11) ~[main/:na]
+        ```
+
+    - SecurityContext를 자식 thread에도 공유하여 @async를 사용한 서비스에도 SecurityContext를 공유받을 수 있음.
+        - [Class InheritableThreadLocal<T>](https://docs.oracle.com/javase/7/docs/api/java/lang/InheritableThreadLocal.html)
+        
+        ```
+        @Override
+        protected void configure(HttpSecurity http) throws Exception {
+            ...
+            // 하위 Thread에게 ContextHolder가 공유되도록 설정
+            SecurityContextHolder.setStrategyName(SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);
+        }
+        ```
+      
+        ```
+        2019-12-22 23:32:40.563 DEBUG 27488 --- [nio-8080-exec-4] o.s.web.servlet.DispatcherServlet        : GET "/async-service", parameters={}
+        2019-12-22 23:32:40.563 DEBUG 27488 --- [nio-8080-exec-4] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped to net.gentledot.demospringsecurity.form.controller.SampleController#asyncService()
+        2019-12-22 23:32:40.563 DEBUG 27488 --- [nio-8080-exec-4] o.j.s.OpenEntityManagerInViewInterceptor : Opening JPA EntityManager in OpenEntityManagerInViewInterceptor
+        MVC before async service.
+        thread : http-nio-8080-exec-4
+        Thread[http-nio-8080-exec-4,5,main]
+        principal : org.springframework.security.core.userdetails.User@364492: Username: test; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER
+        MVC after async service.
+        thread : http-nio-8080-exec-4
+        Thread[http-nio-8080-exec-4,5,main]
+        principal : org.springframework.security.core.userdetails.User@364492: Username: test; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER
+        2019-12-22 23:32:40.569 DEBUG 27488 --- [nio-8080-exec-4] m.m.a.RequestResponseBodyMethodProcessor : Using 'text/html', given [text/html, application/xhtml+xml, image/webp, image/apng, application/xml;q=0.9, application/signed-exchange;v=b3;q=0.9, */*;q=0.8] and supported [text/plain, */*, text/plain, */*, application/json, application/*+json, application/json, application/*+json]
+        2019-12-22 23:32:40.569 DEBUG 27488 --- [nio-8080-exec-4] m.m.a.RequestResponseBodyMethodProcessor : Writing ["Async Service"]
+        2019-12-22 23:32:40.569 DEBUG 27488 --- [nio-8080-exec-4] o.s.s.w.header.writers.HstsHeaderWriter  : Not injecting HSTS header since it did not match the requestMatcher org.springframework.security.web.header.writers.HstsHeaderWriter$SecureRequestMatcher@50bb857d
+        2019-12-22 23:32:40.570 DEBUG 27488 --- [nio-8080-exec-4] o.j.s.OpenEntityManagerInViewInterceptor : Closing JPA EntityManager in OpenEntityManagerInViewInterceptor
+        2019-12-22 23:32:40.570 DEBUG 27488 --- [nio-8080-exec-4] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+        2019-12-22 23:32:40.570 DEBUG 27488 --- [nio-8080-exec-4] o.s.s.w.a.ExceptionTranslationFilter     : Chain processed normally
+        2019-12-22 23:32:40.570 DEBUG 27488 --- [nio-8080-exec-4] s.s.w.c.SecurityContextPersistenceFilter : SecurityContextHolder now cleared, as request processing completed
+        2019-12-22 23:32:40.571 DEBUG 27488 --- [nio-8080-exec-4] o.a.tomcat.util.net.SocketWrapperBase    : Socket: [org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper@7fa7ec32:org.apache.tomcat.util.net.NioChannel@6bedf0ee:java.nio.channels.SocketChannel[connected local=/0:0:0:0:0:0:0:1:8080 remote=/0:0:0:0:0:0:0:1:14625]], Read from buffer: [0]
+        2019-12-22 23:32:40.571 DEBUG 27488 --- [nio-8080-exec-4] org.apache.tomcat.util.net.NioEndpoint   : Socket: [org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper@7fa7ec32:org.apache.tomcat.util.net.NioChannel@6bedf0ee:java.nio.channels.SocketChannel[connected local=/0:0:0:0:0:0:0:1:8080 remote=/0:0:0:0:0:0:0:1:14625]], Read direct from socket: [0]
+        2019-12-22 23:32:40.571 DEBUG 27488 --- [nio-8080-exec-4] o.apache.coyote.http11.Http11Processor   : Socket: [org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper@7fa7ec32:org.apache.tomcat.util.net.NioChannel@6bedf0ee:java.nio.channels.SocketChannel[connected local=/0:0:0:0:0:0:0:1:8080 remote=/0:0:0:0:0:0:0:1:14625]], Status in: [OPEN_READ], State out: [OPEN]
+        2019-12-22 23:32:40.571 DEBUG 27488 --- [nio-8080-exec-4] org.apache.tomcat.util.net.NioEndpoint   : Registered read interest for [org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper@7fa7ec32:org.apache.tomcat.util.net.NioChannel@6bedf0ee:java.nio.channels.SocketChannel[connected local=/0:0:0:0:0:0:0:1:8080 remote=/0:0:0:0:0:0:0:1:14625]]
+        in the async service.
+        thread : task-1
+        Thread[task-1,5,main]
+        principal : org.springframework.security.core.userdetails.User@364492: Username: test; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER
+        Async Service is called.
+        ```
