@@ -22,6 +22,8 @@
     - [Web Application Security](#Web-Application-Security)
         - [ignoring](#ignoring)
         - [WebAsyncManagerIntegrationFilter](#WebAsyncManagerIntegrationFilter)
+        - [SecurityContextPersistenceFilter](#SecurityContextPersistenceFilter)
+        - [HeaderWriterFilter](#HeaderWriterFilter)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -1352,3 +1354,121 @@ principal : org.springframework.security.core.userdetails.User@364492: Username:
         principal : org.springframework.security.core.userdetails.User@364492: Username: test; Password: [PROTECTED]; Enabled: true; AccountNonExpired: true; credentialsNonExpired: true; AccountNonLocked: true; Granted Authorities: ROLE_USER
         Async Service is called.
         ```
+      
+#### SecurityContextPersistenceFilter
+- SecurityContextRepository를 사용해서 기존의 SecurityContext를 읽어오거나 초기화 한다.
+    - 기본으로 사용하는 전략은 HTTP Session을 사용한다.
+        - public class HttpSessionSecurityContextRepository implements SecurityContextRepository
+        
+        ```
+        /**
+         * Populates the {@link SecurityContextHolder} with information obtained from the
+         * configured {@link SecurityContextRepository} prior to the request and stores it back in
+         * the repository once the request has completed and clearing the context holder. By
+         * default it uses an {@link HttpSessionSecurityContextRepository}. See this class for
+         * information <tt>HttpSession</tt> related configuration options.
+         * <p>
+         * This filter will only execute once per request, to resolve servlet container
+         * (specifically Weblogic) incompatibilities.
+         * <p>
+         * This filter MUST be executed BEFORE any authentication processing mechanisms.
+         * Authentication processing mechanisms (e.g. BASIC, CAS processing filters etc) expect
+         * the <code>SecurityContextHolder</code> to contain a valid <code>SecurityContext</code>
+         * by the time they execute.
+         * <p>
+         * This is essentially a refactoring of the old
+         * <tt>HttpSessionContextIntegrationFilter</tt> to delegate the storage issues to a
+         * separate strategy, allowing for more customization in the way the security context is
+         * maintained between requests.
+         * <p>
+         * The <tt>forceEagerSessionCreation</tt> property can be used to ensure that a session is
+         * always available before the filter chain executes (the default is <code>false</code>,
+         * as this is resource intensive and not recommended).
+         *
+         * @author Luke Taylor
+         * @since 3.0
+         */
+        public class SecurityContextPersistenceFilter extends GenericFilterBean {
+        
+        	static final String FILTER_APPLIED = "__spring_security_scpf_applied";
+        
+        	private SecurityContextRepository repo;
+            ...
+        }
+        ```
+      
+    - Spring-Session​과 연동하여 세션 클러스터를 구현할 수 있다.
+    
+    - 모든 인증 filter보다 상위에 위치해있어야 함. (초기는 인증처리하고 인증된 context는 인증을 pass할 수 있도록 설정)
+
+
+#### HeaderWriterFilter
+- 응답 헤더에 시큐리티 관련 헤더를 추가해주는 필터
+    ```
+    // Resopnse Header
+    HTTP/1.1 200
+    X-Content-Type-Options: nosniff
+    X-XSS-Protection: 1; mode=block
+    Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+    Pragma: no-cache
+    Expires: 0
+    X-Frame-Options: DENY
+    Content-Type: text/html;charset=UTF-8
+    Content-Language: ko-KR
+    Transfer-Encoding: chunked
+    Date: Sun, 22 Dec 2019 15:00:41 GMT
+    Keep-Alive: timeout=60
+    Connection: keep-alive
+    ```
+    *** 설명 출처 : [웹 보안, 웹 취약점을 간단한 설정으로 막아보자](https://cyberx.tistory.com/171) 
+    
+    - XContentTypeOptionsHeaderWriter​: 마임 타입 스니핑 방어.
+        - [X-Content-Type-Options](https://developer.mozilla.org/ko/docs/Web/HTTP/Headers/X-Content-Type-Options)
+        
+        ```
+        이 헤더는 리소스를 다운로드 할때 해당 리소스의 MIMETYPE이 일치하지 않는 경우 차단을 할 수 있습니다. 
+        위 처럼 설정하는 경우 styleSheet는 MIMETYPE이 text/css와 일치할 때까지 styleSheet를 로드하지 않습니다. 또한 공격자가 다른 확장자(jpg)로 서버에 파일을 업로드 한 후 script태그등의 src의 경로를 변경하여 script를 로드 하는 등의 공격을 막아줍니다.
+        X-Content-Type-Options: nosniff
+        ```
+      
+    - XXssProtectionHeaderWriter​: 브라우저에 내장된 XSS 필터 적용.
+        - [X-XSS-Protection](https://developer.mozilla.org/ko/docs/Web/HTTP/Headers/X-XSS-Protection)
+        - 추가적인 Filter를 설정 필요 (예를 들면 ... [lucy-xss-filter](https://github.com/naver/lucy-xss-filter))
+        
+        ```
+        이 헤더는 공격자가 XSS공격을 시도할 때 브라우저의 내장 XSS Filter를 통해 공격을 방지할 수 있는 헤더입니다.
+        위 처럼 설정한 경우 브라우저가 XSS공격을 감지하면 자동으로 내용을 치환합니다. mode=block 유무에 따라 내용만 치환 하고 사용자화면에 보여주거나 페이지 로드 자체를 block할 수 있습니다.
+        위 헤더는 브라우저의 내장 XSS Filter에 의해 처리 되므로 각 브라우저마다 처리 방식이 다를 수 있습니다. 모든 공격을 막을 수는 없기 때문에 추가적으로 Filter를 설정하여 방어해야 합니다.
+        X-XSS-Protection: 1; mode=block
+        ```
+      
+    - CacheControlHeadersWriter​: 캐시 히스토리 취약점 방어. (동적 컨텐츠 취약)
+        - [Testing_for_Browser_cache_weakness](https://www.owasp.org/index.php/Testing_for_Browser_cache_weakness_\(OTG-AUTHN-006\))
+        
+        ```
+        공격자가 브라우저의 히스토리를 통한 공격을 진행 할 수 있기 때문에 cache를 적용하지 않는다는 헤더 입니다.
+        Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+        Pragma: no-cache
+        Expires: 0
+        ```
+    
+    - HstsHeaderWriter: HTTPS로만 소통하도록 강제.
+        - [HTTP Strict Transport Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Strict_Transport_Security_Cheat_Sheet.html)
+        
+        ```
+        이 헤더는 한번 https로 접속 하는 경우 이후의 모든 요청을 http로 요청하더라도 브라우저가 자동으로 https로 요청합니다.
+        Strict-Transport-Security: max-age=31536000;includeSubDomains;preload
+        
+        https로 전송한 요청을 중간자가 가로채어 내용을 볼 수 있는(MIMT)기법을 클라이언트 레벨(브라우저)에서 차단할 수 있습니다. 또한 2014년 블랙햇 아시아 컨퍼런스에서 "Leonard Nve Egea"가 sslStrip+ 를 공개하면서 서브도메인을 통해 우회할 수 있는 방법에 대해 includeSubDomains 를 추가하여 차단할수 있습니다. 
+        ```
+        
+    - XFrameOptionsHeaderWriter​: clickjacking 방어.
+        - [X-Frame-Options](https://developer.mozilla.org/ko/docs/Web/HTTP/Headers/X-Frame-Options)
+        ```
+        이 헤더는 사용자의 눈에 보이지 않는 영역을 추가 하여 사용자는 의도한대로 버튼을 누르지만 실제로는 다른 곳을 클릭하게 만드는 ClickJacking을 방지 할 수 있는 옵션입니다. 페이지 내부에 심어질 수 있는 iframe과 같은 곳에 접근을 제어하는 옵션으로 설정 할 수 있습니다.
+        X-Frame-Options: DENY   // 모든 표시를 거부
+      
+        X-Frame-Options : SAMEORIGIN    //    동일한 출처에 대한 것만 표시 합니다.
+        X-Frame-Options : ALLOW FROM http://www.gentledot.net   // www.gentledot.net에 대해서만 허용합니다.
+        ```
+
