@@ -49,7 +49,14 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 */
 
         // form login 설정
-        http.formLogin();
+        http.formLogin()
+                .loginPage("/userLogin")
+                .permitAll()
+            .and()
+            .logout()
+                .logoutUrl("/userLogout")
+                .logoutSuccessUrl("/");
+
         // http의 basic oauth ??
         http.httpBasic();
 

@@ -27,6 +27,7 @@
         - [CSRF Attack 방지 필터](#CsrfFilter)
         - [Logout 처리 필터](#LogoutFilter)
         - [form 처리 인증 필터](#UsernamePasswordAuthenticationFilter)
+        - [기본 login / logout page 생성 필터](#DefaultLoginPageGeneratingFilter-/-DefaultLogoutPageGeneratingFilter)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -1804,4 +1805,92 @@ public class LogoutFilter extends GenericFilterBean {
             - public interface AuthenticationProvider
                 - public class DaoAuthenticationProvider extends AbstractUserDetailsAuthenticationProvider
                     - public interface UserDetailsService
-                    
+             
+
+#### DefaultLoginPageGeneratingFilter / DefaultLogoutPageGeneratingFilter
+- 기본 login / logout 폼 페이지를 생성해주는 필터
+    - default 
+        - login : "/login"
+        - logout : "/logout"
+        - parameter : username, password
+        
+```
+<!DOCTYPE html>
+<html lang="kr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+</head>
+<body>
+    <h1>Login</h1>
+    <div th:if="${param.error}">
+        <p class="alert alert-danger"><b><span class="ui-icon-alert"></span>username 또는 password 오류!</b></p>
+    </div>
+    <form action="/userLogin" method="post" th:action="@{/userLogin}">
+        <div>
+            <p>Username : <input type="text" name="username"/></p>
+            <p>Password : <input type="password" name="password"/></p>
+        </div>
+        <div>
+            <p><input type="submit" value="Login" /></p>
+        </div>
+    </form>
+</body>
+</html>
+```
+
+```
+<!DOCTYPE html>
+<html lang="kr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Logout</title>
+</head>
+<body>
+    <h1>Logout?</h1>
+    <form action="/userLogout" method="post" th:action="@{/userLogout}">
+        <div>
+            <p><input type="submit" value="Logout" /></p>
+        </div>
+    </form>
+</body>
+</html>
+```
+
+```
+package net.gentledot.demospringsecurity.account.controller;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+
+@Controller
+public class LogInOutController {
+
+    @GetMapping("/userLogin")
+    public String loginForm(){
+        return "sample/login";
+    }
+
+    @GetMapping("/userLogout")
+    public String logoutPage(){
+        return "sample/logout";
+    }
+}
+```
+
+```
+// SecurityConfig 설정
+@Override
+protected void configure(HttpSecurity http) throws Exception {
+    ...
+    // form login 설정
+    http.formLogin()
+            .loginPage("/userLogin")
+            .permitAll()
+        .and()
+        .logout()
+            .logoutUrl("/userLogout")
+            .logoutSuccessUrl("/");
+}
+```
+

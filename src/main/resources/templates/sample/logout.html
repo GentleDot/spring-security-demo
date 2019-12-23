@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="kr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Logout</title>
+</head>
+<body>
+    <h1>Logout?</h1>
+    <form action="/userLogout" method="post" th:action="@{/userLogout}">
+        <div>
+            <p><input type="submit" value="Logout" /></p>
+        </div>
+    </form>
+</body>
+</html>

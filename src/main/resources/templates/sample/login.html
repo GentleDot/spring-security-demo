@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="kr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+</head>
+<body>
+    <h1>Login</h1>
+    <div th:if="${param.error}">
+        <p class="alert alert-danger"><b><span class="ui-icon-alert"></span>username 또는 password 오류!</b></p>
+    </div>
+    <form action="/userLogin" method="post" th:action="@{/userLogin}">
+        <div>
+            <p>Username : <input type="text" name="username"/></p>
+            <p>Password : <input type="password" name="password"/></p>
+        </div>
+        <div>
+            <p><input type="submit" value="Login" /></p>
+        </div>
+    </form>
+</body>
+</html>
