@@ -20,11 +20,13 @@
         - [FilterSecurityInterceptor](#FilterSecurityInterceptor)
         - [Architecture 정리](#Architecture-정리)
     - [Web Application Security](#Web-Application-Security)
-        - [ignoring](#ignoring)
-        - [WebAsyncManagerIntegrationFilter](#WebAsyncManagerIntegrationFilter)
-        - [SecurityContextPersistenceFilter](#SecurityContextPersistenceFilter)
-        - [HeaderWriterFilter](#HeaderWriterFilter)
+        - [필터 적용 제외 설정](#ignoring)
+        - [Async Web MVC 지원 필터](#WebAsyncManagerIntegrationFilter)
+        - [SecurityContext 영속화 필터](#SecurityContextPersistenceFilter)
+        - [Security 관련 Header 추가 필터](#HeaderWriterFilter)
         - [CSRF Attack 방지 필터](#CsrfFilter)
+        - [Logout 처리 필터](#LogoutFilter)
+        - [form 처리 인증 필터](#UsernamePasswordAuthenticationFilter)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -1741,3 +1743,65 @@ principal : org.springframework.security.core.userdetails.User@364492: Username:
     - TEST 상에서 csrf 설정이 없으면 403(forbidden) 되어 테스트가 실패.
         - .with(csrf()) 추가 필요.
         - org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf    
+
+
+#### LogoutFilter
+여러 LogoutHandler를 사용하여 로그아웃시 필요한 처리를 하며 이후에는 LogoutSuccessHandler를 사용하여 로그아웃 후처리를 한다.
+
+```
+public class LogoutFilter extends GenericFilterBean {
+
+	// ~ Instance fields
+	// ================================================================================================
+
+	private RequestMatcher logoutRequestMatcher;
+
+	private final LogoutHandler handler;
+	private final LogoutSuccessHandler logoutSuccessHandler;
+    
+    ...
+}
+```
+
+- public interface LogoutHandler
+    - public final class CompositeLogoutHandler implements LogoutHandler
+        - public final class CsrfLogoutHandler implements LogoutHandler
+        - public class SecurityContextLogoutHandler implements LogoutHandler
+
+- public interface LogoutSuccessHandler
+    - public class SimpleUrlLogoutSuccessHandler extends
+      		AbstractAuthenticationTargetUrlRequestHandler implements LogoutSuccessHandler
+      		
+- logout filter 설정
+    ```
+    http.logout()
+    .logoutUrl("/logout")           // logout 처리할 페이지 설정
+    .logoutSuccessUrl("/")          // logout 성공 시 redirect 페이지 설정
+    .addLogoutHandler()             // logout 시 부가적인 작업 설정 
+    .logoutSuccessHandler();        // logout 성공 시 부가적인 작업 설정
+    .invalidateHttpSession(true)    // logout 시 HttpSession invalidated 
+    .deleteCookies()                // Cookie 기반 인증 사용 시 logout 할 때 Cookie 삭제
+    .logoutRequestMatcher() 
+    ```
+         
+
+#### UsernamePasswordAuthenticationFilter
+폼 로그인을 처리하는 인증 필터
+
+- public class UsernamePasswordAuthenticationFilter extends
+  		AbstractAuthenticationProcessingFilter
+    - 사용자가 폼에 입력한 username과 password로 Authentcation을 만들고
+    AuthenticationManager를 사용하여 인증을 시도한다.
+        - UsernamePasswordAuthenticationToken authRequest = new UsernamePasswordAuthenticationToken(
+          				username, password)
+        - return this.getAuthenticationManager().authenticate(authRequest)
+        
+    - AuthenticationManager (ProviderManager)는 여러 AuthenticationProvider를 사용하여
+    인증을 시도하는데, 그 중에 DaoAuthenticationProvider는 UserDetailsServivce를
+    사용하여 UserDetails 정보를 가져와 사용자가 입력한 password와 비교한다.
+        - public class ProviderManager implements AuthenticationManager, MessageSourceAware,
+          		InitializingBean
+            - public interface AuthenticationProvider
+                - public class DaoAuthenticationProvider extends AbstractUserDetailsAuthenticationProvider
+                    - public interface UserDetailsService
+                    
