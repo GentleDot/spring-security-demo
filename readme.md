@@ -28,6 +28,7 @@
         - [Logout 처리 필터](#LogoutFilter)
         - [form 처리 인증 필터](#UsernamePasswordAuthenticationFilter)
         - [기본 login / logout page 생성 필터](#DefaultLoginPageGeneratingFilter-/-DefaultLogoutPageGeneratingFilter)
+        - [Basic 인증 처리 필터](#BasicAuthenticationFilter)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -1894,3 +1895,27 @@ protected void configure(HttpSecurity http) throws Exception {
 }
 ```
 
+
+#### BasicAuthenticationFilter
+- Basic 인증?
+    - [The 'Basic' HTTP Authentication Scheme](https://tools.ietf.org/html/rfc7617)
+    - 요청 헤더에 username와 password를 실어 보내면 브라우저 또는 서버가 그 값을 읽어서 인증하는 방식.
+        - 예) Authorization: Basic QWxhZGRpbjpPcGVuU2VzYW1l (keesun:123을 BASE 64로 encoding)
+    - 보통, 브라우저 기반 요청이 클라이언트의 요청을 처리할 때 자주 사용.
+    - 보안에 취약하기 때문에 반드시 **HTTPS를 사용할 것**을 권장.
+    
+- UsernamePasswordAuthenticationFilter와의 비교
+    
+    | Basic | Username |
+    | :--- | :--- |
+    | parameter : username, password  ||
+    | Request Header에 싣은 것을 읽음 | Form Request에서 읽어들임 |
+    | stateless (context(인증상태) 저장하지 않음) | stateful (SessionRepository에 caching 하여 context(인증상태) 저장) |
+    
+    - rememberMe / Session 사용 중지 가능하지만....
+
+    - curl -u test:test1 http://localhost:8080
+        - 인증 후 인증에 필요한 정보 제거 후 url만 요청하면 로그인 상태가 되지 않음.
+        - (윈도우는 Invoke-WebRequest 또는 Invoke-RestMethod 인데... 어휴ㅠ.) [Basic Web Authentication(power-shell)](https://www.reddit.com/r/PowerShell/comments/3z4wt8/basic_web_authentication/)
+        
+    
