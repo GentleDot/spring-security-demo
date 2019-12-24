@@ -29,6 +29,8 @@
         - [form 처리 인증 필터](#UsernamePasswordAuthenticationFilter)
         - [기본 login / logout page 생성 필터](#DefaultLoginPageGeneratingFilter-/-DefaultLogoutPageGeneratingFilter)
         - [Basic 인증 처리 필터](#BasicAuthenticationFilter)
+        - [요청 캐시 필터](#RequestCacheAwareFilter)
+        - [Security 관련 Servlet Spec. 구현 필터](#SecurityContextHolderAwareRequestFilter)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -1919,3 +1921,108 @@ protected void configure(HttpSecurity http) throws Exception {
         - (윈도우는 Invoke-WebRequest 또는 Invoke-RestMethod 인데... 어휴ㅠ.) [Basic Web Authentication(power-shell)](https://www.reddit.com/r/PowerShell/comments/3z4wt8/basic_web_authentication/)
         
     
+#### RequestCacheAwareFilter
+- 현재 요청과 관련있는 캐시된 요청이 있는지 찾아 적용하는 핉터.
+    - 캐시된 요청이 있다면 : 해당 캐시된 요청 처리
+    - 캐시된 요청이 없다면 : 현재 요청 처리
+    
+```
+/**
+ * Responsible for reconstituting the saved request if one is cached and it matches the
+ * current request.
+ * <p>
+ * It will call
+ * {@link RequestCache#getMatchingRequest(HttpServletRequest, HttpServletResponse)
+ * getMatchingRequest} on the configured <tt>RequestCache</tt>. If the method returns a
+ * value (a wrapper of the saved request), it will pass this to the filter chain's
+ * <tt>doFilter</tt> method. If null is returned by the cache, the original request is
+ * used and the filter has no effect.
+ *
+ * @author Luke Taylor
+ * @since 3.0
+ */
+public class RequestCacheAwareFilter extends GenericFilterBean {
+
+	private RequestCache requestCache;
+
+	public RequestCacheAwareFilter() {
+		this(new HttpSessionRequestCache());
+	}
+
+	public RequestCacheAwareFilter(RequestCache requestCache) {
+		Assert.notNull(requestCache, "requestCache cannot be null");
+		this.requestCache = requestCache;
+	}
+
+	public void doFilter(ServletRequest request, ServletResponse response,
+			FilterChain chain) throws IOException, ServletException {
+
+		HttpServletRequest wrappedSavedRequest = requestCache.getMatchingRequest(
+				(HttpServletRequest) request, (HttpServletResponse) response);
+
+        // 캐시된 Request 확인 후 처리
+		chain.doFilter(wrappedSavedRequest == null ? request : wrappedSavedRequest,
+				response);
+	}
+}
+```
+
+
+#### SecurityContextHolderAwareRequestFilter
+- 시큐리티 관련 서블릿 API를 구현해주는 필터
+    - HttpServletRequest#authenticate(HttpServletResponse)
+    - HttpServletRequest#login(String, String)
+    - HttpServletRequest#logout()
+    - AsyncContext#start(Runnable)
+
+```
+/**
+ * A <code>Filter</code> which populates the <code>ServletRequest</code> with a request
+ * wrapper which implements the servlet API security methods.
+ * <p>
+ * {@link SecurityContextHolderAwareRequestWrapper} is extended to provide the following
+ * additional methods:
+ * </p>
+ * <ul>
+ * <li>{@link HttpServletRequest#authenticate(HttpServletResponse)} - Allows the user to
+ * determine if they are authenticated and if not send the user to the login page. See
+ * {@link #setAuthenticationEntryPoint(AuthenticationEntryPoint)}.</li>
+ * <li>{@link HttpServletRequest#login(String, String)} - Allows the user to authenticate
+ * using the {@link AuthenticationManager}. See
+ * {@link #setAuthenticationManager(AuthenticationManager)}.</li>
+ * <li>{@link HttpServletRequest#logout()} - Allows the user to logout using the
+ * {@link LogoutHandler}s configured in Spring Security. See
+ * {@link #setLogoutHandlers(List)}.</li>
+ * <li>{@link AsyncContext#start(Runnable)} - Automatically copy the
+ * {@link SecurityContext} from the {@link SecurityContextHolder} found on the Thread that
+ * invoked {@link AsyncContext#start(Runnable)} to the Thread that processes the
+ * {@link Runnable}.</li>
+ * </ul>
+ *
+ *
+ * @author Orlando Garcia Carmona
+ * @author Ben Alex
+ * @author Luke Taylor
+ * @author Rob Winch
+ * @author Eddú Meléndez
+ */
+public class SecurityContextHolderAwareRequestFilter extends GenericFilterBean {
+	// ~ Instance fields
+	// ================================================================================================
+
+	private String rolePrefix = "ROLE_";
+
+	private HttpServletRequestFactory requestFactory;
+
+	private AuthenticationEntryPoint authenticationEntryPoint;
+
+	private AuthenticationManager authenticationManager;
+
+	private List<LogoutHandler> logoutHandlers;
+
+	private AuthenticationTrustResolver trustResolver = new AuthenticationTrustResolverImpl();
+
+    ...
+}
+```
+
