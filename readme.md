@@ -31,6 +31,10 @@
         - [Basic 인증 처리 필터](#BasicAuthenticationFilter)
         - [요청 캐시 필터](#RequestCacheAwareFilter)
         - [Security 관련 Servlet Spec. 구현 필터](#SecurityContextHolderAwareRequestFilter)
+        - [익명 인증 필터](#AnonymousAuthenticationFilter)
+        - [세션 관리 필터](#SessionManagementFilter)
+        - [인증 / 인가 예외 처리 필터](#ExceptionTranslationFilter)
+        
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -2026,3 +2030,270 @@ public class SecurityContextHolderAwareRequestFilter extends GenericFilterBean {
 }
 ```
 
+
+#### AnonymousAuthenticationFilter
+[Anonymous Authentication](https://docs.spring.io/spring-security/site/docs/5.1.5.RELEASE/reference/htmlsingle/#anonymous)
+
+
+- 현재 SecurityContext에 Authentication이 
+    - null이면 “익명 Authentication”을 만들어 넣어주고
+    - null이 아니면 아무일도 하지 않는다.
+
+    ```
+    public class AnonymousAuthenticationFilter extends GenericFilterBean implements
+    		InitializingBean {
+    
+    	// ~ Instance fields
+    	// ================================================================================================
+    
+    	private AuthenticationDetailsSource<HttpServletRequest, ?> authenticationDetailsSource = new WebAuthenticationDetailsSource();
+    	private String key;
+    	private Object principal;
+    	private List<GrantedAuthority> authorities;
+    
+    	/**
+    	 * Creates a filter with a principal named "anonymousUser" and the single authority
+    	 * "ROLE_ANONYMOUS".
+    	 *
+    	 * @param key the key to identify tokens created by this filter
+    	 */
+    	public AnonymousAuthenticationFilter(String key) {
+    		this(key, "anonymousUser", AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS"));
+    	}
+    
+    	/**
+    	 *
+    	 * @param key key the key to identify tokens created by this filter
+    	 * @param principal the principal which will be used to represent anonymous users
+    	 * @param authorities the authority list for anonymous users
+    	 */
+    	public AnonymousAuthenticationFilter(String key, Object principal,
+    			List<GrantedAuthority> authorities) {
+    		Assert.hasLength(key, "key cannot be null or empty");
+    		Assert.notNull(principal, "Anonymous authentication principal must be set");
+    		Assert.notNull(authorities, "Anonymous authorities must be set");
+    		this.key = key;
+    		this.principal = principal;
+    		this.authorities = authorities;
+    	}
+    
+    	// ~ Methods
+    	// ========================================================================================================
+
+    	public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
+    			throws IOException, ServletException {
+    
+    		if (SecurityContextHolder.getContext().getAuthentication() == null) {
+    			SecurityContextHolder.getContext().setAuthentication(
+    					createAuthentication((HttpServletRequest) req));
+    
+    			if (logger.isDebugEnabled()) {
+    				logger.debug("Populated SecurityContextHolder with anonymous token: '"
+    						+ SecurityContextHolder.getContext().getAuthentication() + "'");
+    			}
+    		}
+    		else {
+    			if (logger.isDebugEnabled()) {
+    				logger.debug("SecurityContextHolder not populated with anonymous token, as it already contained: '"
+    						+ SecurityContextHolder.getContext().getAuthentication() + "'");
+    			}
+    		}
+    
+    		chain.doFilter(req, res);
+    	}
+    
+    	protected Authentication createAuthentication(HttpServletRequest request) {
+    		AnonymousAuthenticationToken auth = new AnonymousAuthenticationToken(key,
+    				principal, authorities);
+    		auth.setDetails(authenticationDetailsSource.buildDetails(request));
+    
+    		return auth;
+    	}
+        ...
+    }
+    ```
+  
+- 기본으로 만들어 사용할 "익명 Authentication" 객체를 설정 할 수 있음.
+  
+    ```
+    http.anonymous()
+    .principal()
+    .authorities()
+    .key()
+    ```
+  
+- Null 대신 Null의 성격인 Object를 생성
+    - [Null object pattern](https://en.wikipedia.org/wiki/Null_object_pattern)
+    - [Null Object Pattern - John Grib](https://johngrib.github.io/wiki/null-object-pattern)
+    
+
+#### SessionManagementFilter
+[Session Management](https://docs.spring.io/spring-security/site/docs/5.1.5.RELEASE/reference/htmlsingle/#session-mgmt)
+
+- 세션 변조 방지 전략 설정
+    - [session-management-attributes](https://docs.spring.io/spring-security/site/docs/5.1.5.RELEASE/reference/htmlsingle/#nsa-session-management-attributes)
+    - http.sessionManagement().sessionFixation()
+        - none()
+        - newSession()
+        - migrateSession()  ** Servlet 3.0 이하 컨테이너 사용시 기본값)
+        - changeSessionId()  ** Servlet 3.1 이상 컨테이너 사용시 기본값)
+        
+- 유효하지 않은 세션을 redirect 시킬 URL 설정
+    - http.sessionManagement().invalidSessionUrl()
+        
+    - 동시성 제어  
+        [concurrency-control](https://docs.spring.io/spring-security/site/docs/5.1.5.RELEASE/reference/htmlsingle/#nsa-concurrency-control)
+    
+        - http.sessionManagement().maximumSessions() : 세션 개수 설정
+            - maxSessionsPreventsLogin() : 추가 로그인을 막을지 말지 설정  (default = false)
+            
+    - 세션 생성 전략
+        - http.sessionManagement().sessionCreationPolicy()
+            - IF_REQUIRED (Default) : 필요할 때 session 생성
+            - NEVER : Security에서는 session 생성 안하고 외부 session 사용
+            - STATELESS : session 생성하지 않음. 
+            - ALWAYS
+
+- [Spring Session](https://spring.io/projects/spring-session)    
+        
+        
+#### ExceptionTranslationFilter
+[ExceptionTranslationFilter](https://docs.spring.io/spring-security/site/docs/5.1.5.RELEASE/reference/htmlsingle/#exception-translation-filter)
+
+- 인증, 인가 에러 처리를 담당하는 필터
+     - AuthenticationEntryPoint
+     - AccessDeniedHandler
+     
+     ```
+     /**
+      * Handles any <code>AccessDeniedException</code> and <code>AuthenticationException</code>
+      * thrown within the filter chain.
+      * <p>
+      * This filter is necessary because it provides the bridge between Java exceptions and
+      * HTTP responses. It is solely concerned with maintaining the user interface. This filter
+      * does not do any actual security enforcement.
+      * <p>
+      * If an {@link AuthenticationException} is detected, the filter will launch the
+      * <code>authenticationEntryPoint</code>. This allows common handling of authentication
+      * failures originating from any subclass of
+      * {@link org.springframework.security.access.intercept.AbstractSecurityInterceptor}.
+      * <p>
+      * If an {@link AccessDeniedException} is detected, the filter will determine whether or
+      * not the user is an anonymous user. If they are an anonymous user, the
+      * <code>authenticationEntryPoint</code> will be launched. If they are not an anonymous
+      * user, the filter will delegate to the
+      * {@link org.springframework.security.web.access.AccessDeniedHandler}. By default the
+      * filter will use {@link org.springframework.security.web.access.AccessDeniedHandlerImpl}.
+      * <p>
+      * To use this filter, it is necessary to specify the following properties:
+      * <ul>
+      * <li><code>authenticationEntryPoint</code> indicates the handler that should commence
+      * the authentication process if an <code>AuthenticationException</code> is detected. Note
+      * that this may also switch the current protocol from http to https for an SSL login.</li>
+      * <li><tt>requestCache</tt> determines the strategy used to save a request during the
+      * authentication process in order that it may be retrieved and reused once the user has
+      * authenticated. The default implementation is {@link HttpSessionRequestCache}.</li>
+      * </ul>
+      *
+      * @author Ben Alex
+      * @author colin sampaleanu
+      */
+     public class ExceptionTranslationFilter extends GenericFilterBean {
+        // ~ Instance fields
+        // ================================================================================================
+    
+        private AccessDeniedHandler accessDeniedHandler = new AccessDeniedHandlerImpl();
+        private AuthenticationEntryPoint authenticationEntryPoint;
+        private AuthenticationTrustResolver authenticationTrustResolver = new AuthenticationTrustResolverImpl();
+        private ThrowableAnalyzer throwableAnalyzer = new DefaultThrowableAnalyzer();
+    
+        private RequestCache requestCache = new HttpSessionRequestCache();
+    
+        private final MessageSourceAccessor messages = SpringSecurityMessageSource.getAccessor();
+        ...
+     }
+     ```
+
+- http.exceptionHandling()
+    - 예외처리 Handling 가능.
+    - AuthenticationException, AccessDeniedException 처리를 설정할 수 있음.
+
+
+- AccessDeniedException 처리의 예
+    ```
+    
+    http.exceptionHandling()
+    //                .accessDeniedPage("/access-denied");  // Denied 될 경우 메시지 출력 URI 설정
+                .accessDeniedHandler(accessDeniedLogger.deniedHandle());
+    ```
+  
+    ```
+    package net.gentledot.demospringsecurity.common;
+    
+    import org.apache.commons.logging.Log;
+    import org.apache.commons.logging.LogFactory;
+    import org.springframework.security.core.context.SecurityContextHolder;
+    import org.springframework.security.core.userdetails.UserDetails;
+    import org.springframework.security.web.access.AccessDeniedHandler;
+    import org.springframework.stereotype.Component;
+    
+    @Component
+    public class AccessDeniedLogger {
+    
+        public Log logger = LogFactory.getLog(AccessDeniedLogger.class);
+    
+        public AccessDeniedHandler deniedHandle() {
+            return (request, response, accessDeniedException) -> {
+                UserDetails principal = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+                String username = principal.getUsername();
+                logger.debug("===AccessDeniedLogger===");
+                logger.debug("user_" + username + " is denied to access " + request.getRequestURI());
+                logger.debug("===AccessDeniedLogger===");
+                response.sendRedirect("/access-denied");
+            };
+        }
+    }
+    ```
+  
+    ```
+    package net.gentledot.demospringsecurity.account.controller;
+    
+    import org.springframework.stereotype.Controller;
+    import org.springframework.ui.Model;
+    import org.springframework.web.bind.annotation.GetMapping;
+    
+    import java.security.Principal;
+    
+    @Controller
+    public class AccessDeniedControler {
+        @GetMapping("/access-denied")
+        public String notifyAccessDenied(Model model, Principal principal) {
+            model.addAttribute("name", principal.getName());
+            return "sample/access-denied";
+        }
+    }
+    ```
+    ```
+    // sample/access-denied.html
+    <!DOCTYPE html>
+    <html lang="kr" xmlns:th="http://www.thymeleaf.org">
+    <head>
+        <meta charset="UTF-8">
+        <title>Access Denied</title>
+    </head>
+    <body>
+        <h1>
+            <span th:text="${name}">User</span>, you are not allowed to access to this page.
+        </h1>
+    </body>
+    </html>
+    ```
+  
+    ```
+    2019-12-25 01:29:27.230 DEBUG 7716 --- [nio-8080-exec-8] n.g.d.common.AccessDeniedLogger          : ===AccessDeniedLogger===
+    2019-12-25 01:29:27.232 DEBUG 7716 --- [nio-8080-exec-8] n.g.d.common.AccessDeniedLogger          : user_test is denied to access /admin
+    2019-12-25 01:29:27.232 DEBUG 7716 --- [nio-8080-exec-8] n.g.d.common.AccessDeniedLogger          : ===AccessDeniedLogger===
+    ```
+    ![http://localhost:8080/access-denied](img/access_denied.JPG "AccessDenied 될 때 custom page 설정")
+    
+    

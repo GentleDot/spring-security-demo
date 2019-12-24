@@ -1,7 +1,7 @@
 package net.gentledot.demospringsecurity.config;
 
 import net.gentledot.demospringsecurity.account.service.AccountService;
-import org.springframework.beans.factory.annotation.Autowired;
+import net.gentledot.demospringsecurity.common.AccessDeniedLogger;
 import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.expression.SecurityExpressionHandler;
@@ -19,8 +19,13 @@ import org.springframework.security.web.access.expression.DefaultWebSecurityExpr
 @EnableWebSecurity
 public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
-    @Autowired
-    AccountService accountService;
+    private final AccountService accountService;
+    private final AccessDeniedLogger accessDeniedLogger;
+
+    public SecurityConfig(AccountService accountService, AccessDeniedLogger accessDeniedLogger) {
+        this.accountService = accountService;
+        this.accessDeniedLogger = accessDeniedLogger;
+    }
 
     @Override
     public void configure(WebSecurity web) throws Exception {
@@ -59,6 +64,12 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
         // http의 basic oauth ??
         http.httpBasic();
+
+        http.exceptionHandling()
+//                .accessDeniedPage("/access-denied");
+            .accessDeniedHandler(accessDeniedLogger.deniedHandle());
+
+
 
         // 하위 Thread에게 ContextHolder가 공유되도록 설정
         SecurityContextHolder.setStrategyName(SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);
