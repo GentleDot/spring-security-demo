@@ -1,14 +1,16 @@
 package net.gentledot.demospringsecurity.form.controller;
 
+import net.gentledot.demospringsecurity.account.domain.Account;
+import net.gentledot.demospringsecurity.account.domain.UserAccount;
 import net.gentledot.demospringsecurity.account.service.SampleService;
+import net.gentledot.demospringsecurity.common.CurrentUser;
 import net.gentledot.demospringsecurity.common.SecurityLogger;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
-import java.security.Principal;
 import java.util.concurrent.Callable;
 
 @Controller
@@ -21,10 +23,10 @@ public class SampleController {
     }
 
     @GetMapping("/")
-    public String index(Model model, Principal principal) {
+    public String index(Model model, @AuthenticationPrincipal UserAccount userAccount) {
         String message = "Hello, Spring Security.";
-        if (principal != null) {
-            message = "Hello, " + principal.getName();
+        if (userAccount != null) {
+            message = "Hello, " + userAccount.getUsername();
         }
 
         model.addAttribute("message", message);
@@ -38,21 +40,21 @@ public class SampleController {
     }
 
     @GetMapping("/dashboard")
-    public String dashboard(Model model, Principal principal) {
-        model.addAttribute("message", "Hello, " + principal.getName());
+    public String dashboard(Model model, @AuthenticationPrincipal(expression = "#this == 'anonymousUser' ? null : account") Account account) {
+        model.addAttribute("message", "Hello, " + account.getUsername());
         sampleService.dashboard();
         return "sample/dashboard";
     }
 
     @GetMapping("/admin")
-    public String admin(Model model, Principal principal) {
-        model.addAttribute("message", "Hello, " + principal.getName() + "! You are logged in as Admin.");
+    public String admin(Model model, @CurrentUser Account account) {
+        model.addAttribute("message", "Hello, " + account.getUsername() + "! You are logged in as Admin.");
         return "sample/admin";
     }
 
     @GetMapping("/user")
-    public String user(Model model, Principal principal) {
-        model.addAttribute("message", "Hello, User. " + principal.getName());
+    public String user(Model model, @CurrentUser Account account) {
+        model.addAttribute("message", "Hello, User! Your username is " + account.getUsername());
         return "sample/user";
     }
 

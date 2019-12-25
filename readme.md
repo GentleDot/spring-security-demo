@@ -39,6 +39,8 @@
         - [Custom Filter 추가](#Custom-Filter-추가)
     - [thymeleaf 연동](#thymeleaf-연동)    
     - [Spring Method Security](#Spring-Method-Security)
+    - [Custom User Class 구현](#AuthenticationPrincipal)
+    
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -2580,6 +2582,163 @@ public class SampleServiceTest {
 
         accountService.createUser(account);
         return account;
+    }
+}
+```
+
+### AuthenticationPrincipal
+[@AuthenticationPrincipal](https://docs.spring.io/spring-security/site/docs/5.1.5.RELEASE/reference/htmlsingle/#mvc-authentication-principal)
+
+Web MVC handler argument로 Principal 객체를 받을 수 있음.
+
+- Custom User Class 구현
+```
+package net.gentledot.demospringsecurity.account.domain;
+
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+
+import java.util.List;
+
+public class UserAccount extends User {
+
+    private Account account;
+    /*
+    public UserAccount(String username, String password, Collection<? extends GrantedAuthority> authorities) {
+        super(username, password, authorities);
+    }
+    */
+    public UserAccount(Account account) {
+        super(account.getUsername(), account.getPassword(), List.of(new SimpleGrantedAuthority("ROLE_" + account.getRole())));
+        this.account = account;
+    }
+
+    public Account getAccount() {
+        return account;
+    }
+}
+```
+
+- UserDetail 객체를 return 하는 UserDetailService를 구현한 AccountService 수정
+```
+package net.gentledot.demospringsecurity.account.service;
+
+import net.gentledot.demospringsecurity.account.domain.Account;
+import net.gentledot.demospringsecurity.account.domain.UserAccount;
+import net.gentledot.demospringsecurity.account.repository.AccountRepository;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AccountService implements UserDetailsService {
+
+    private final AccountRepository accountRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    public AccountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) {
+        this.accountRepository = accountRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    // username을 받아 해당하는 user 정보를 가져와 UserDetails로 return
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        Account account = accountRepository.findByUsername(username);
+
+        // username == null 에서 변경
+        // 로그인하지 않았지만 rememberMe Token 에 있는 userName으로 조회할 수도 있기 때문에 변경 필요.
+        if (account == null) {
+            throw new UsernameNotFoundException(username);
+        }
+
+        /*return User.builder()
+                .username(account.getUsername())
+                .password(account.getPassword())
+                .roles(account.getRole())
+                .build();*/
+
+        return new UserAccount(account);
+    }
+
+    public Account createUser(Account account) {
+        account.encodePassword(passwordEncoder);
+        return  accountRepository.save(account);
+    }
+}
+```
+
+- Controller에 @AuthenticationPrincipal 적용
+    1. UserDetailService의 return 값을 parameter로 받을 수 있음.
+        - 그 안에 있는 Account 객체는 getter()로 가져오기 가능.
+        
+    1. UserDetail에 있는 Account를 바로 참조
+        - 익명 Authentication = "anonymousUser" 이므로 account는 없음 (null)
+    
+    1. expression을 사용한 @AuthenticationPrincipal을 custom annotation으로 만들어서 사용
+    
+```
+package net.gentledot.demospringsecurity.form.controller;
+
+import net.gentledot.demospringsecurity.account.domain.Account;
+import net.gentledot.demospringsecurity.account.domain.UserAccount;
+import net.gentledot.demospringsecurity.account.service.SampleService;
+import net.gentledot.demospringsecurity.common.CurrentUser;
+import net.gentledot.demospringsecurity.common.SecurityLogger;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+import java.util.concurrent.Callable;
+
+@Controller
+public class SampleController {
+
+    private final SampleService sampleService;
+
+    public SampleController(SampleService sampleService) {
+        this.sampleService = sampleService;
+    }
+
+    @GetMapping("/")
+    public String index(Model model, @AuthenticationPrincipal UserAccount userAccount) {
+        String message = "Hello, Spring Security.";
+        if (userAccount != null) {
+            message = "Hello, " + userAccount.getUsername();
+        }
+
+        model.addAttribute("message", message);
+        return "index";
+    }
+
+    @GetMapping("/info")
+    public String info(Model model) {
+        model.addAttribute("message", "Hello, this is info page");
+        return "sample/info";
+    }
+
+    @GetMapping("/dashboard")
+    public String dashboard(Model model, @AuthenticationPrincipal(expression = "#this == 'anonymousUser' ? null : account") Account account) {
+        model.addAttribute("message", "Hello, " + account.getUsername());
+        sampleService.dashboard();
+        return "sample/dashboard";
+    }
+
+    @GetMapping("/admin")
+    public String admin(Model model, @CurrentUser Account account) {
+        model.addAttribute("message", "Hello, " + account.getUsername() + "! You are logged in as Admin.");
+        return "sample/admin";
+    }
+
+    @GetMapping("/user")
+    public String user(Model model, @CurrentUser Account account) {
+        model.addAttribute("message", "Hello, User! Your username is " + account.getUsername());
+        return "sample/user";
     }
 }
 ```

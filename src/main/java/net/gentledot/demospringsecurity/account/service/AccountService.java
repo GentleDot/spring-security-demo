@@ -1,6 +1,7 @@
 package net.gentledot.demospringsecurity.account.service;
 
 import net.gentledot.demospringsecurity.account.domain.Account;
+import net.gentledot.demospringsecurity.account.domain.UserAccount;
 import net.gentledot.demospringsecurity.account.repository.AccountRepository;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -25,15 +26,19 @@ public class AccountService implements UserDetailsService {
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         Account account = accountRepository.findByUsername(username);
 
-        if (username == null) {
+        // username == null 에서 변경
+        // 로그인하지 않았지만 rememberMe Token 에 있는 userName으로 조회할 수도 있기 때문에 변경 필요.
+        if (account == null) {
             throw new UsernameNotFoundException(username);
         }
 
-        return User.builder()
+        /*return User.builder()
                 .username(account.getUsername())
                 .password(account.getPassword())
                 .roles(account.getRole())
-                .build();
+                .build();*/
+
+        return new UserAccount(account);
     }
 
     public Account createUser(Account account) {
