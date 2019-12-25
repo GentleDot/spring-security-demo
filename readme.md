@@ -2412,3 +2412,174 @@ implementation 'org.thymeleaf.extras:thymeleaf-extras-springsecurity5'
 ```
 
 ### Spring Method Security
+[Method Security](https://docs.spring.io/spring-security/site/docs/5.1.5.RELEASE/reference/htmlsingle/#jc-method)
+
+@EnableGlobalMethodSecurity
+
+```
+package net.gentledot.demospringsecurity.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.access.AccessDecisionManager;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
+import org.springframework.security.access.vote.AffirmativeBased;
+import org.springframework.security.access.vote.RoleHierarchyVoter;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
+import org.springframework.security.config.annotation.method.configuration.GlobalMethodSecurityConfiguration;
+
+@Configuration
+@EnableGlobalMethodSecurity(securedEnabled = true, jsr250Enabled = true, prePostEnabled = true)
+public class MethodSecurityConfig extends GlobalMethodSecurityConfiguration {
+
+    // DecisionVoter에 roleHirerarchyVoter 추가
+    @Override
+    protected AccessDecisionManager accessDecisionManager() {
+        RoleHierarchyImpl roleHierarchy = new RoleHierarchyImpl();
+        roleHierarchy.setHierarchy("ROLE_ADMIN > ROLE_USER");
+
+        AffirmativeBased accessDecisionManager = (AffirmativeBased) super.accessDecisionManager();
+        accessDecisionManager.getDecisionVoters().add(new RoleHierarchyVoter(roleHierarchy));
+
+        return accessDecisionManager;
+    }
+}
+```
+
+```
+package net.gentledot.demospringsecurity.account.service;
+
+import net.gentledot.demospringsecurity.common.SecurityLogger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.security.access.annotation.Secured;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Service;
+
+import java.util.Collection;
+
+@Service
+public class SampleService {
+
+    private Logger logger = LogManager.getLogger(this.getClass());
+    
+    @Secured("ROLE_USER")
+    public void dashboard() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        UserDetails principal = (UserDetails) authentication.getPrincipal();
+        Collection<? extends GrantedAuthority> authorities = authentication.getAuthorities();
+        Object credentials = authentication.getCredentials();
+        boolean authenticated = authentication.isAuthenticated();
+
+        logger.debug("======SecurityContextHolder======");
+        logger.debug("authentication : " + authentication);
+        logger.debug("principal : " + principal);
+        logger.debug("username : " + principal.getUsername());
+        logger.debug("credentials : " + credentials);
+        logger.debug("authenticated : " + authenticated);
+        logger.debug("======SecurityContextHolder======");
+    }
+
+}
+
+```
+
+- 권한 확인
+    - method 호출 이전에 권한을 확인
+    - SpEL 사용 불가.
+    - @Secured
+        - org.springframework.security.access.annotation.Secured (securedEnabled)
+    - @RollAllowed
+        - javax.annotation.security.RolesAllowed (jsr250Enabled)
+    
+- 인가 이전 / 이후 동작 설정 (prePostEnabled)
+    - method 호출 이전 @annotation
+    - SpEL 사용 가능.
+    - org.springframework.security.access.prepost.PreAuthorize
+    - org.springframework.security.access.prepost.PostAuthorize
+        - returnObject 참조 가능.
+
+
+- 사용 예   
+[Introduction to Spring Method Security](https://www.baeldung.com/spring-security-method-security)
+    - @Secured, @RoleAllowed
+    - @PreAuthorize, @PostAuthorize
+    - @PreFilter, @PostFilter
+
+    ```
+    // https://www.baeldung.com/spring-security-method-security#5-method-security-meta-annotation
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @PreAuthorize("hasRole('VIEWER')")
+    public @interface IsViewer {
+    }
+    ```    
+  
+- Test
+    - spring-security-test 의존성 추가 필요
+
+```
+package net.gentledot.demospringsecurity.account.service;
+
+import net.gentledot.demospringsecurity.account.domain.Account;
+import org.junit.jupiter.api.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.test.context.junit4.SpringRunner;
+
+@RunWith(SpringRunner.class)
+@SpringBootTest
+public class SampleServiceTest {
+
+    @Autowired
+    SampleService sampleService;
+
+    @Autowired
+    AccountService accountService;
+
+    @Autowired
+    AuthenticationManager authenticationManager;
+
+    @Test
+    public void dashboard() {
+        String username = "test";
+        String password = "test1";
+        String role = "USER";
+        Account account = createUser(username, password, role);
+
+        UserDetails principal = accountService.loadUserByUsername(username);
+        UsernamePasswordAuthenticationToken token = new UsernamePasswordAuthenticationToken(principal, password);
+        Authentication authentication = authenticationManager.authenticate(token);
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        sampleService.dashboard();
+    }
+
+    @Test
+    @WithMockUser(username = "test", password = "test1", roles = "USER")
+    public void dashboardTestUsingMockUser() {
+        sampleService.dashboard();
+    }
+
+    private Account createUser(String username, String password, String roleStr) {
+        Account account = Account.builder()
+                .username(username)
+                .password(password)
+                .role(roleStr)
+                .build();
+
+        accountService.createUser(account);
+        return account;
+    }
+}
+```

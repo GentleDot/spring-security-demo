@@ -3,9 +3,11 @@ package net.gentledot.demospringsecurity.config;
 import net.gentledot.demospringsecurity.account.service.AccountService;
 import net.gentledot.demospringsecurity.common.AccessDeniedLogger;
 import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.expression.SecurityExpressionHandler;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.builders.WebSecurity;
@@ -79,8 +81,6 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 //                .useSecureCookie() // HTTPS 접근만 쿠키 사용이 가능하도록 설정
 //                .alwaysRemember()   // default = false
 
-
-
         // 하위 Thread에게 ContextHolder가 공유되도록 설정
         SecurityContextHolder.setStrategyName(SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);
     }
@@ -96,11 +96,12 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 //                .withUser("admin").password("{noop}!@#").roles("ADMIN");
 //    }
 //
-//    @Bean
-//    @Override
-//    public AuthenticationManager authenticationManagerBean() throws Exception {
-//        return super.authenticationManagerBean();
-//    }
+    @Bean
+    @Override
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+
 
     @Override
     protected void configure(AuthenticationManagerBuilder auth) throws Exception {
