@@ -2,6 +2,7 @@ package net.gentledot.demospringsecurity.form.controller;
 
 import net.gentledot.demospringsecurity.account.domain.Account;
 import net.gentledot.demospringsecurity.account.domain.UserAccount;
+import net.gentledot.demospringsecurity.account.repository.BookRepository;
 import net.gentledot.demospringsecurity.account.service.SampleService;
 import net.gentledot.demospringsecurity.common.CurrentUser;
 import net.gentledot.demospringsecurity.common.SecurityLogger;
@@ -18,8 +19,11 @@ public class SampleController {
 
     private final SampleService sampleService;
 
-    public SampleController(SampleService sampleService) {
+    private BookRepository bookRepository;
+
+    public SampleController(SampleService sampleService, BookRepository bookRepository) {
         this.sampleService = sampleService;
+        this.bookRepository = bookRepository;
     }
 
     @GetMapping("/")
@@ -55,6 +59,7 @@ public class SampleController {
     @GetMapping("/user")
     public String user(Model model, @CurrentUser Account account) {
         model.addAttribute("message", "Hello, User! Your username is " + account.getUsername());
+        model.addAttribute("books", bookRepository.findCurrentUserBooks());
         return "sample/user";
     }
 

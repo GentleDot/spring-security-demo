@@ -6,5 +6,13 @@
 </head>
 <body>
     <h1 th:text="${message}">User!</h1>
+    <div>
+        <h2>Book Info</h2>
+        <table>
+            <tr th:each="book : ${books}">
+                <td><span th:text="${book.title}">BookTitle</span></td>
+            </tr>
+        </table>
+    </div>
 </body>
 </html>

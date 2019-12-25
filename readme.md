@@ -40,6 +40,7 @@
     - [thymeleaf 연동](#thymeleaf-연동)    
     - [Spring Method Security](#Spring-Method-Security)
     - [Custom User Class 구현](#AuthenticationPrincipal)
+    - [Spring Data와의 연동](#Spring-Security-Data)
     
         
 ## 목표
@@ -55,6 +56,7 @@
     - [spring-security 5.0 에서 달라진 암호변환정책](https://java.ihoney.pe.kr/498)
     - [Spring Password Encoder](https://gompangs.tistory.com/entry/Spring-Password-Encoder)
     - [자바 커스텀 어노테이션 만들기](https://advenoh.tistory.com/21)
+    - [JPA Entity의 기본 생성자 관련 예외 정리하기](https://www.wbluke.com/6)
     
 - 강의 :
     - [스프링 시큐리티 / 백기선](https://www.inflearn.com/course/%EB%B0%B1%EA%B8%B0%EC%84%A0-%EC%8A%A4%ED%94%84%EB%A7%81-%EC%8B%9C%ED%81%90%EB%A6%AC%ED%8B%B0/lecture/22894)  
@@ -2742,3 +2744,36 @@ public class SampleController {
     }
 }
 ```
+
+### Spring Security Data
+[Spring Data Integration](https://docs.spring.io/spring-security/site/docs/current/reference/html5/#data)
+
+- public class SecurityEvaluationContextExtension
+		implements EvaluationContextExtension
+
+    - @Query Annotation에서 SpEL로 Principal 참조할 수 있는 기능 제공.
+
+
+- 의존성 설정
+
+    ```
+    // pom.xml
+    <dependency>
+        <groupId>org.springframework.security</groupId>
+        <artifactId>spring-security-data</artifactId>
+        <version>${spring-security.version}</version>
+    </dependency>
+    
+    // build.gradle
+    implementation 'org.springframework.security:spring-security-data'
+    ```
+  
+- @Query에서 principal 사용
+    
+    ```
+    @Query("select b from Book b where b.author.id = ?#{principal.account.id}")
+    List<Book> findCurrentUserBooks();
+    ```
+
+- Lombok과 JPA annotation 사용시 주의!
+    [JPA Entity의 기본 생성자 관련 예외 정리하기](https://www.wbluke.com/6)
