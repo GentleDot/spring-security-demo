@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AccessDeniedLogger {
 
-    public Log logger = LogFactory.getLog(AccessDeniedLogger.class);
+    private Log logger = LogFactory.getLog(AccessDeniedLogger.class);
 
     public AccessDeniedHandler deniedHandle() {
         return (request, response, accessDeniedException) -> {

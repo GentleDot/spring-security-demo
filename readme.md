@@ -36,6 +36,7 @@
         - [인증 / 인가 예외 처리 필터](#ExceptionTranslationFilter)
         - [HTTP Resource Security 처리 담당 필터](#FilterSecurityInterceptor)
         - [토큰 기반 인증 필터](#RememberMeAuthenticationFilter)
+        - [Custom Filter 추가](#Custom-Filter-추가)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -2346,3 +2347,24 @@ public class SecurityContextHolderAwareRequestFilter extends GenericFilterBean {
     ```
   
 - 크롬 확장 프로그램 - [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg?hl=ko)
+
+
+#### Custom Filter 추가
+- http.addFilter() ???
+- http.addFilterAfter(new LoggingFilter(), UsernamePasswordAuthenticationFilter.class)
+- http.addFilterBefore(new LoggingFilter(), WebAsyncManagerIntegrationFilter.class)
+
+```
+public class LoggingFilter extends GenericFilterBean {
+    private Logger logger = LoggerFactory.getLogger(this.getClass());
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start(((HttpServletRequest)request).getRequestURI());
+        chain.doFilter(request, response);
+        stopWatch.stop();
+        logger.info(stopWatch.prettyPrint());
+    }
+}
+```
