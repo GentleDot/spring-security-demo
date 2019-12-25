@@ -37,6 +37,8 @@
         - [HTTP Resource Security 처리 담당 필터](#FilterSecurityInterceptor)
         - [토큰 기반 인증 필터](#RememberMeAuthenticationFilter)
         - [Custom Filter 추가](#Custom-Filter-추가)
+    - [thymeleaf 연동](#thymeleaf-연동)    
+    - [Spring Method Security](#Spring-Method-Security)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -2368,3 +2370,45 @@ public class LoggingFilter extends GenericFilterBean {
     }
 }
 ```
+
+
+### thymeleaf 연동
+
+- thymeleaf-extras-springsecurity5
+```
+//pom.xml
+<dependency>
+<groupId>org.thymeleaf.extras</groupId>
+<artifactId>thymeleaf-extras-springsecurity5</artifactId>
+</dependency>
+
+// build.gradle
+implementation 'org.thymeleaf.extras:thymeleaf-extras-springsecurity5'
+```
+
+```
+<div th:if="${#authorization.expr('isAuthenticated()')}">
+    <h2 th:text="${#authentication.name}">Name</h2>
+    <a href="/logout" th:href="@{/logout}">Logout</a>
+</div>
+<div th:unless="${#authorization.expr('isAuthenticated()')}">
+    <a href="/login" th:href="@{/login}">Login</a>
+</div>
+```
+
+- sec namespace 사용
+```
+<html lang="kr" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+...
+// hasAuthority(), hasRole(), hasIpAddress(), hasPermission()
+// isAnoymous(), isAuthenticated(), isRememberMe()
+<div sec:authorize-expr="isAuthenticated()">
+    <h2 sec:authentication="name">Name</h2>
+    <a href="/logout" th:href="@{/logout}">Logout</a>
+</div>
+<div sec:authorize-expr="isAuthenticated()">
+    <a href="/login" th:href="@{/login}">Login</a>
+</div>
+```
+
+### Spring Method Security
