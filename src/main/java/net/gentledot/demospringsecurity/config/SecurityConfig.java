@@ -60,7 +60,9 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
             .and()
             .logout()
                 .logoutUrl("/userLogout")
-                .logoutSuccessUrl("/");
+                .logoutSuccessUrl("/")
+            .and()
+            .headers(); // headers() 를 통해 브라우저가 더 이상 페이지를 캐시하지 않음.
 
         // http의 basic oauth ??
         http.httpBasic();
@@ -68,6 +70,14 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         http.exceptionHandling()
 //                .accessDeniedPage("/access-denied");
             .accessDeniedHandler(accessDeniedLogger.deniedHandle());
+
+        http.rememberMe()
+                .userDetailsService(accountService)
+                .key("remember-me-sample");
+//                .rememberMeParameter("rememberParam") // default = remember-me
+//                .tokenValiditySeconds() // default = 2주
+//                .useSecureCookie() // HTTPS 접근만 쿠키 사용이 가능하도록 설정
+//                .alwaysRemember()   // default = false
 
 
 

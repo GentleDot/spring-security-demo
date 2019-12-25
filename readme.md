@@ -34,7 +34,8 @@
         - [익명 인증 필터](#AnonymousAuthenticationFilter)
         - [세션 관리 필터](#SessionManagementFilter)
         - [인증 / 인가 예외 처리 필터](#ExceptionTranslationFilter)
-        
+        - [HTTP Resource Security 처리 담당 필터](#FilterSecurityInterceptor)
+        - [토큰 기반 인증 필터](#RememberMeAuthenticationFilter)
         
 ## 목표
 1. Spring Security Form 인증 학습
@@ -1198,6 +1199,7 @@ catch (AccessDeniedException accessDeniedException) {
 
 
 ### Web Application Security
+![Spring Security Filter](img/security_filter.jpg "스프링 시큐리티 필터")
 
 #### ignoring
 WebSecurity의 ignoring()을 사용해서 시큐리티 필터 적용을 제외할 요청을 설정할 수 있다.
@@ -2220,8 +2222,8 @@ public class SecurityContextHolderAwareRequestFilter extends GenericFilterBean {
 
 
 - AccessDeniedException 처리의 예
-    ```
     
+    ```
     http.exceptionHandling()
     //                .accessDeniedPage("/access-denied");  // Denied 될 경우 메시지 출력 URI 설정
                 .accessDeniedHandler(accessDeniedLogger.deniedHandle());
@@ -2297,3 +2299,50 @@ public class SecurityContextHolderAwareRequestFilter extends GenericFilterBean {
     ![http://localhost:8080/access-denied](img/access_denied.JPG "AccessDenied 될 때 custom page 설정")
     
     
+    
+#### FilterSecurityInterceptor
+[filter-security-interceptor](#https://docs.spring.io/spring-security/site/docs/5.1.5.RELEASE/reference/htmlsingle/#filter-security-interceptor)
+
+- HTTP Resource Security 처리를 담당하는 필터. 
+    - AccessDecisionManager를 사용하여 인가를
+처리한다.
+
+- HTTP Resource Security 설정
+    - [Class HttpSecurity](https://docs.spring.io/spring-security/site/docs/current/api/org/springframework/security/config/annotation/web/builders/HttpSecurity.html)
+    ```
+    http.authorizeRequests()
+        .mvcMatchers("/", "/info", "/account/**", "/signup").permitAll()
+        .mvcMatchers("/admin").hasRole("ADMIN")
+        .mvcMatchers("/user").hasRole("USER")
+        .anyRequest().authenticated()
+        .expressionHandler(expressionHandler());
+    ```
+
+
+#### RememberMeAuthenticationFilter
+- 세션이 사라지거나 만료가 되더라도 쿠키 또는 DB를 사용하여 저장된 토큰 기반으로 인증을 지원하는 필터
+    ```
+    /**
+     * Represents a remembered <code>Authentication</code>.
+     * <p>
+     * A remembered <code>Authentication</code> must provide a fully valid
+     * <code>Authentication</code>, including the <code>GrantedAuthority</code>s that apply.
+     *
+     * @author Ben Alex
+     * @author Luke Taylor
+     */
+    public class RememberMeAuthenticationToken extends AbstractAuthenticationToken
+    ```
+
+- RememberMe 설정
+    ```
+    http.rememberMe()
+        .userDetailsService(accountService)
+        .key("remember-me-sample");
+    //                .rememberMeParameter("rememberParam") // default = remember-me
+    //                .tokenValiditySeconds() // default = 2주
+    //                .useSecureCookie() // HTTPS 접근만 쿠키 사용이 가능하도록 설정
+    //                .alwaysRemember()   // 항시 쿠키 생성, default = false
+    ```
+  
+- 크롬 확장 프로그램 - [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg?hl=ko)
