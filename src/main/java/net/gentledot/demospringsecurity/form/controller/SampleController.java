@@ -9,6 +9,7 @@ import net.gentledot.demospringsecurity.common.SecurityLogger;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
@@ -37,6 +38,7 @@ public class SampleController {
         return "index";
     }
 
+    @CrossOrigin
     @GetMapping("/info")
     public String info(Model model) {
         model.addAttribute("message", "Hello, this is info page");

@@ -37,6 +37,7 @@
         - [HTTP Resource Security 처리 담당 필터](#FilterSecurityInterceptor)
         - [토큰 기반 인증 필터](#RememberMeAuthenticationFilter)
         - [Custom Filter 추가](#Custom-Filter-추가)
+        - [CORS와 CorsFilter](#CORS와-CorsFilter)
     - [thymeleaf 연동](#thymeleaf-연동)    
     - [Spring Method Security](#Spring-Method-Security)
     - [Custom User Class 구현](#AuthenticationPrincipal)
@@ -2376,6 +2377,193 @@ public class LoggingFilter extends GenericFilterBean {
 ```
 
 
+#### CORS와 CorsFilter
+Cross-Origin Resource Sharing
+- [CORS with Spring](https://www.baeldung.com/spring-cors)
+- [Fixing 401s with CORS Preflights and Spring Security](https://www.baeldung.com/spring-security-cors-preflight)
+
+- @CrossOrigin
+    - Controller Class 또는 method 위에 사용 가능
+        ```
+        @CrossOrigin
+        @GetMapping("/info")
+        public String info(Model model) {
+            model.addAttribute("message", "Hello, this is info page");
+            return "sample/info";
+        }
+        ``` 
+      
+    - default 상태는
+        - 모든 origin 허용.
+        - HTTP method 전체 가능
+        - preflight response 가 캐싱됨. (maxAge : 30분)
+        
+    - attributes
+        - origins
+        - methods
+        - allowedHeaders
+        - exposeHeaders
+        - allowCredentials(또는 maxAge)
+        
+    ```
+    // https://www.baeldung.com/spring-cors#3-crossorigin-on-controller-and-handler-method
+    @CrossOrigin(maxAge = 3600)
+    @RestController
+    @RequestMapping("/account")
+    public class AccountController {
+     
+        @CrossOrigin("http://example.com")
+        @RequestMapping("/{id}")
+        public Account retrieve(@PathVariable Long id) {
+            // ...
+        }
+     
+        @RequestMapping(method = RequestMethod.DELETE, path = "/{id}")
+        public void remove(@PathVariable Long id) {
+            // ...
+        }
+    }
+    ```
+  
+- CORS 설정
+    - JavaConfig (CorsRegistration을 return)
+    
+    ```
+    package net.gentledot.demospringsecurity.config;
+    
+    import org.springframework.web.servlet.config.annotation.CorsRegistry;
+    import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+    
+    public class MvcConfig implements WebMvcConfigurer {
+        
+        @Override
+        public void addCorsMappings(CorsRegistry registry) {
+    //        registry.addMapping("/**");
+            registry.addMapping("/**")
+                .allowedHeaders()
+                .allowCredentials()
+                .allowedMethods()
+                .allowedOrigins()
+                .exposedHeaders()
+                .maxAge();
+        }
+    }
+    ```
+  
+    - XML configuration
+    
+    ```
+    // https://www.baeldung.com/spring-cors#2-xml-namespace
+    <mvc:cors>
+     
+        <mvc:mapping path="/api/**"
+            allowed-origins="http://domain1.com, http://domain2.com"
+            allowed-methods="GET, PUT"
+            allowed-headers="header1, header2, header3"
+            exposed-headers="header1, header2" allow-credentials="false"
+            max-age="123" />
+     
+        <mvc:mapping path="/resources/**"
+            allowed-origins="http://domain1.com" />
+     
+    </mvc:cors>
+    ```
+
+- [동작 원리](https://www.baeldung.com/spring-cors#how-it-works)
+    - CORS 요청은 등록된 handlerMapping에 자동으로 발송.
+    - CORS preflight 요청을 처리하고 CORS response header 추가하기위해 CorsProcessor를 구현. (default = DefaultCorsProcessor)
+    
+    ```
+    /**
+     * The default implementation of {@link CorsProcessor}, as defined by the
+     * <a href="https://www.w3.org/TR/cors/">CORS W3C recommendation</a>.
+     *
+     * <p>Note that when input {@link CorsConfiguration} is {@code null}, this
+     * implementation does not reject simple or actual requests outright but simply
+     * avoid adding CORS headers to the response. CORS processing is also skipped
+     * if the response already contains CORS headers.
+     *
+     * @author Sebastien Deleuze
+     * @author Rossen Stoyanchev
+     * @since 4.2
+     */
+    public class DefaultCorsProcessor implements CorsProcessor
+    ```
+    
+    - CorsConfiguration을 사용하여 CORS request 처리 설정 가능 (origin, header, method 등)  
+        [Class CorsConfiguration](https://docs.spring.io/spring/docs/current/javadoc-api/org/springframework/web/cors/CorsConfiguration.html)
+        
+        - AbstractHandlerMapping#setCorsConfiguration()
+        ```
+        public abstract class AbstractHandlerMapping extends WebApplicationObjectSupport
+        		implements HandlerMapping, Ordered, BeanNameAware {
+        
+        	@Nullable
+        	private Object defaultHandler;
+        
+        	private UrlPathHelper urlPathHelper = new UrlPathHelper();
+        
+        	private PathMatcher pathMatcher = new AntPathMatcher();
+        
+        	private final List<Object> interceptors = new ArrayList<>();
+        
+        	private final List<HandlerInterceptor> adaptedInterceptors = new ArrayList<>();
+        
+        	@Nullable
+        	private CorsConfigurationSource corsConfigurationSource;
+        
+        	private CorsProcessor corsProcessor = new DefaultCorsProcessor();
+        
+        	private int order = Ordered.LOWEST_PRECEDENCE;  // default: same as non-Ordered
+        
+        	@Nullable
+        	private String beanName;
+            ...
+        	/**
+        	 * Set the "global" CORS configurations based on URL patterns. By default the first
+        	 * matching URL pattern is combined with the CORS configuration for the handler, if any.
+        	 * @since 4.2
+        	 * @see #setCorsConfigurationSource(CorsConfigurationSource)
+        	 */
+        	public void setCorsConfigurations(Map<String, CorsConfiguration> corsConfigurations) {
+        		Assert.notNull(corsConfigurations, "corsConfigurations must not be null");
+        		if (!corsConfigurations.isEmpty()) {
+        			UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        			source.setCorsConfigurations(corsConfigurations);
+        			source.setPathMatcher(this.pathMatcher);
+        			source.setUrlPathHelper(this.urlPathHelper);
+        			source.setLookupPathAttributeName(LOOKUP_PATH);
+        			this.corsConfigurationSource = source;
+        		}
+        		else {
+        			this.corsConfigurationSource = null;
+        		}
+        	}
+        ```
+        
+        - AbstractHandlerMapping#getCorsConfiguration(Object, HttpServletRequest) 를 overriding 하여 설정
+        
+        - CorsConfigurationSource 구현 handler 에서 제공되는 CorsConfiguration을 통해 설정
+        
+- preflight request 를 security 설정으로 (authorization check) bypass 시키기  
+    [spring-security-cors-preflight](https://www.baeldung.com/spring-security-cors-preflight)
+
+    - preflight request는 method = OPTIONS로 전송되어 request에 대한 authorization token을 확인 (API expects an authorization token in the OPTIONS request as well.)
+    - http.cors() 를 통해 CorsFilter를 filter chain에 추가
+        ```
+        @Configuration
+        @EnableWebSecurity
+        public class SecurityConfig extends WebSecurityConfigurerAdapter
+        
+            @Override
+            protected void configure(HttpSecurity http) throws Exception {
+                // ...
+                http.cors();
+            }
+        }
+        ```
+    - [CORS, Preflight, 인증 처리 관련 삽질](https://www.popit.kr/cors-preflight-%EC%9D%B8%EC%A6%9D-%EC%B2%98%EB%A6%AC-%EA%B4%80%EB%A0%A8-%EC%82%BD%EC%A7%88/) 
+        
 ### thymeleaf 연동
 
 - thymeleaf-extras-springsecurity5
@@ -2777,3 +2965,4 @@ public class SampleController {
 
 - Lombok과 JPA annotation 사용시 주의!
     [JPA Entity의 기본 생성자 관련 예외 정리하기](https://www.wbluke.com/6)
+    
